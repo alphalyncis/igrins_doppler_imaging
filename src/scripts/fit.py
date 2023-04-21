@@ -9,7 +9,6 @@ from astropy.io import fits
 from astropy.table import Table
 import glob
 import paths
-homedir = os.path.expanduser('~')
 c = 2.99792e5 # km/s
 
 print("Running fit.py... Imports ok.")
@@ -24,14 +23,14 @@ lld = {}
 wcoef = {}
 modellist = []
 
-for f in sorted(glob.glob(f"{homedir}/uoedrive/result/Callie/IGRINS_W1049B_K_binned_chipmods_*.fits")):
+for f in sorted(glob.glob(f"{paths.data.as_posix()}/IGRINS_W1049B_K_binned_chipmods_*.fits")):
     modelname = f.split("_")[-1][:12]
     chipmods[modelname] = fits.getdata(f)
     modellist.append(modelname)
-for f in sorted(glob.glob(f"{homedir}/uoedrive/result/Callie/IGRINS_W1049B_K_binned_chiplams_*.fits")):
+for f in sorted(glob.glob(f"{paths.data.as_posix()}/IGRINS_W1049B_K_binned_chiplams_*.fits")):
     modelname = f.split("_")[-1][:12]
     chiplams[modelname] = fits.getdata(f)
-for f in sorted(glob.glob(f"{homedir}/uoedrive/result/Callie/IGRINS_W1049B_K_binned_*.txt")):
+for f in sorted(glob.glob(f"{paths.data.as_posix()}/IGRINS_W1049B_K_binned_*.txt")):
     modelname = f.split("_")[-1][:12]
     results = Table.read(f, format='ascii')
     chisq[modelname] = results['chisq']
@@ -56,7 +55,7 @@ open(paths.output / "fit_table.txt", "w").write(df.to_latex())
 model = 't1500g1000f8'
 pad = 50
 filename = f'IGRINS_W1049B_K_{model}.pickle'
-with open(f"{homedir}/uoedrive/result/Callie/{filename}", 'rb') as f:
+with open(paths.data / filename, 'rb') as f:
     ret = pickle.load(f, encoding="latin1")
 
 fobs = ret['fobs0']
