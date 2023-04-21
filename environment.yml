@@ -1,6 +1,16 @@
+channels:
+  - conda-forge
+  - defaults
 dependencies:
-  - conda-forge::numpy=1.19.2
-  - conda-forge::pip=21.0.1
-  - conda-forge::python=3.9
+  - mkl-service>=2.3.0
+  - pip>=20.3.3
+  - python=3.7.3
+  - numpy=1.19.2
+  - scipy=1.5.2
   - pip:
-      - matplotlib==3.4.3
+      - pymc3==3.10.0
+      - arviz==0.11.0
+      - matplotlib>=3.3.3
+      - tqdm>=4.56.0
+      - starry-process==0.9.8
+      - starry==1.2.0
