@@ -1,6 +1,7 @@
 % Define document class
 \documentclass[twocolumn]{aastex631}
 \usepackage{showyourwork}
+\usepackage{booktabs}
 
 % Begin!
 \begin{document}
@@ -55,9 +56,9 @@ Pellentesque cursus luctus mauris \citep{Luger2021}.
 Fit results:
 \begin{table*}[ht!]
     \centering
-    \caption{Table Caption}
+    \caption{Fit results}
     \label{tab:my_table}
-    \variable{output/fit_table.txt}
+    \input{output/fit_table.txt}
 \end{table*}
 
 
