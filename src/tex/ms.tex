@@ -2,7 +2,7 @@
 \documentclass[twocolumn]{aastex631}
 \usepackage{showyourwork}
 \usepackage{booktabs}
-\usepackage{subcaption}
+%\usepackage{subcaption}
 
 % Begin!
 \begin{document}
@@ -66,7 +66,7 @@ Fit results:
     \centering
     \caption{Fit results}
     \label{tab:my_table}
-    \variable{output/fit_table.txt}
+    %\variable{output/fit_table.txt}
 \end{table*}
 
 
@@ -125,40 +125,40 @@ Fit results:
 \begin{figure*}
     \script{doppler_imaging.py}
     \centering
-    \begin{subfigure}[b]{0.18\textwidth}
+    \begin{minipage}[b]{0.18\textwidth}
         \centering
         \includegraphics[width=\textwidth]{figures/solver1.pdf}
-        \caption{IC14new}
+        %\caption{IC14new}
         \label{fig:solver1}
-     \end{subfigure}
+     \end{minipage}
      \hfill
-     \begin{subfigure}[b]{0.18\textwidth}
+     \begin{minipage}[b]{0.18\textwidth}
          \centering
          \includegraphics[width=\textwidth]{figures/solver2.pdf}
-         \caption{LSD+starry lin}
+         %\caption{LSD+starry lin}
          \label{fig:solver2}
-     \end{subfigure}
+     \end{minipage}
      \hfill
-     \begin{subfigure}[b]{0.18\textwidth}
+     \begin{minipage}[b]{0.18\textwidth}
          \centering
          \includegraphics[width=\textwidth]{figures/solver3.pdf}
-         \caption{LSD+starry opt}
+         %\caption{LSD+starry opt}
          \label{fig:solver3}
-     \end{subfigure}
+     \end{minipage}
      \hfill
-     \begin{subfigure}[b]{0.18\textwidth}
+     \begin{minipage}[b]{0.18\textwidth}
          \centering
          \includegraphics[width=\textwidth]{figures/solver4.pdf}
-         \caption{starry lin}
+         %\caption{starry lin}
          \label{fig:solver4}
-     \end{subfigure}
+     \end{minipage}
      \hfill
-     \begin{subfigure}[b]{0.18\textwidth}
+     \begin{minipage}[b]{0.18\textwidth}
          \centering
          \includegraphics[width=\textwidth]{figures/solver5.pdf}
-         \caption{starry opt}
+         %\caption{starry opt}
          \label{fig:solver5}
-     \end{subfigure}
+     \end{minipage}
 \end{figure*} 
 
 %\variable{output/testout.txt}
