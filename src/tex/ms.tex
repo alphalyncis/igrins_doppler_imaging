@@ -111,6 +111,7 @@ Fit results:
 
 \subsection{IGRINS K and H band maps}
 
+\iffalse
 \begin{figure*}
     \script{doppler_imaging.py}
     \centering
@@ -149,6 +150,51 @@ Fit results:
          \label{fig:solver5}
      \end{minipage}
 \end{figure*} 
+\fi
+
+\section{Simulations}
+
+\subsection{spot vs band model}
+
+\begin{figure*}
+    \script{simulation.py}
+    \centering
+    \begin{minipage}[b]{0.18\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/solver1.pdf}
+        %\caption{IC14new}
+        \label{fig:solver1}
+     \end{minipage}
+     \hfill
+     \begin{minipage}[b]{0.18\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/solver2.pdf}
+         %\caption{LSD+starry lin}
+         \label{fig:solver2}
+     \end{minipage}
+     \hfill
+     \begin{minipage}[b]{0.18\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/solver3.pdf}
+         %\caption{LSD+starry opt}
+         \label{fig:solver3}
+     \end{minipage}
+     \hfill
+     \begin{minipage}[b]{0.18\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/solver4.pdf}
+         %\caption{starry lin}
+         \label{fig:solver4}
+     \end{minipage}
+     \hfill
+     \begin{minipage}[b]{0.18\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/solver5.pdf}
+         %\caption{starry opt}
+         \label{fig:solver5}
+     \end{minipage}
+\end{figure*} 
+
 
 %\variable{output/testout.txt}
 
