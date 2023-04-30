@@ -32,13 +32,14 @@ import dime3 as dime # Doppler Imaging & Maximum Entropy, needed for various fun
 ####################   Methods for workflow    #################################
 ################################################################################
 
-def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
+def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
     global wav_nm, wav0_nm, npix, npix0, flux_err
     # Load model and data
     with open(model_datafile, "rb") as f:
         data = pickle.load(f, encoding="latin1")
     lams = data["chiplams"][0] # in um
-    nchip, npix = lams.shape[0], lams.shape[1]
+    nchip = len(goodchips)
+    npix = lams.shape[1]
     print(f"nobs: {nobs}, nchip: {nchip}, npix: {npix}")
 
     observed = np.empty((nobs, nchip, npix))
@@ -48,23 +49,23 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
 
     if instru == "IGRINS":
         for k in range(nobs):
-            for c, jj in enumerate(goodchips):
-                observed[k][c] = np.interp(
+            for i, jj in enumerate(goodchips):
+                observed[k, i] = np.interp(
                     lams[jj], 
                     data["chiplams"][k][jj],
                     data["fobs0"][k][jj] #/ data["chipcors"][k][c+firstchip],
                 )
-                template[k][c] = np.interp(
+                template[k, i] = np.interp(
                     lams[jj],
                     data["chiplams"][k][jj],
                     data["chipmodnobroad"][k][jj] #/ data["chipcors"][k][c+firstchip]
                 )
-                residual[k][c] = np.interp(
+                residual[k, i] = np.interp(
                     lams[jj], 
                     data["chiplams"][k][jj],
                     data["fobs0"][k][jj] - data["chipmods"][k][jj]
                 )
-                error[k][c] = np.interp(
+                error[k, i] = np.interp(
                     lams[jj],
                     data["chiplams"][k][jj],
                     remove_spike(data["eobs0"][k][jj])
@@ -72,18 +73,18 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
 
     elif instru == "CRIRES":
         for k in range(nobs):
-            for c, jj in enumerate(goodchips):
-                observed[k][c] = np.interp(
+            for i, jj in enumerate(goodchips):
+                observed[k, i] = np.interp(
                     lams[jj],
                     data["chiplams"][k][jj],
                     data["obs1"][k][jj] / data["chipcors"][k][jj],
                 )
-                template[k][c] = np.interp(
+                template[k, i] = np.interp(
                     lams[jj],
                     data["chiplams"][k][jj],
                     data["chipmodnobroad"][k][jj] / data["chipcors"][k][jj],
                 )
-                residual[k][c] = np.interp(
+                residual[k, i] = np.interp(
                     lams[jj], 
                     data["chiplams"][k][jj],
                     data["obs1"][k][jj] - data["chipmods"][k][jj]
@@ -98,20 +99,20 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
     observed = observed[:, :, pad:-pad]
     flux_err = eval(f'{error.mean():.3f}') if instru =="IGRINS" else 0.02
 
-    for c, jj in enumerate(goodchips):
-        wav_nm[c] = lams[jj][pad:-pad] * 1000 # um to nm
-        wav0_nm[c] = lams[jj] * 1000 # um to nm
+    for i, jj in enumerate(goodchips):
+        wav_nm[i] = lams[jj][pad:-pad] * 1000 # um to nm
+        wav0_nm[i] = lams[jj] * 1000 # um to nm
         if use_toy_spec:
             toy_spec = (
                 1.0
-                - 0.50 * np.exp(-0.5 * (wav0_nm[c] - 2338) ** 2 / 0.03 ** 2)
-                - 0.60 * np.exp(-0.5 * (wav0_nm[c] - 2345) ** 2 / 0.03 ** 2)
-                - 0.20 * np.exp(-0.5 * (wav0_nm[c] - 2347) ** 2 / 0.03 ** 2)
+                - 0.50 * np.exp(-0.5 * (wav0_nm[i] - 2338) ** 2 / 0.03 ** 2)
+                - 0.60 * np.exp(-0.5 * (wav0_nm[i] - 2345) ** 2 / 0.03 ** 2)
+                - 0.20 * np.exp(-0.5 * (wav0_nm[i] - 2347) ** 2 / 0.03 ** 2)
             )
             for k in range(nobs):
-                template[k, c] = toy_spec
-            mean_spectrum[c] = toy_spec
-        mean_spectrum[c] = np.mean(template[:, c], axis=0)
+                template[k, i] = toy_spec
+            mean_spectrum[i] = toy_spec
+        mean_spectrum[i] = np.mean(template[:, i], axis=0)
 
     print("mean_spectrum:", mean_spectrum.shape)
     print("template:", template.shape)
@@ -120,10 +121,8 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
 
     return mean_spectrum, template, observed, residual, error
 
-def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, error, residual, 
-                     kwargs_sim, noisetype, savedir, plot_ts=False):
-
-    nchip = residual.shape[1]
+def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, 
+                     error, residual, noisetype, kwargs_sim, savedir, plot_ts=False):
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = 1 - contrast
@@ -168,8 +167,8 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     # Compute simulated flux
     allchips_flux = []
-    for c in range(nchip):
-        sim_map = starry.DopplerMap(lazy=False, wav=wav_nm[c], wav0=wav0_nm[c], **kwargs_sim)
+    for i in range(wav_nm.shape[0]):
+        sim_map = starry.DopplerMap(lazy=False, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_sim)
         sim_map.load(maps=[fakemap], smoothing=smoothing)
         sim_map[1] = kwargs_sim["u1"]
 
@@ -177,12 +176,12 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         noise = {
             "none": np.zeros(npix0),
             "random": np.random.normal(np.zeros(npix0), flux_err),
-            "obserr": np.mean(error[:, c], axis=0),
-            "residual": np.mean(residual[:, c], axis=0),
-            "res+random": np.mean(residual[:, c], axis=0) + np.random.normal(np.zeros(npix0), flux_err_add)
+            "obserr": np.mean(error[:, i], axis=0),
+            "residual": np.mean(residual[:, i], axis=0),
+            "res+random": np.mean(residual[:, i], axis=0) + np.random.normal(np.zeros(npix0), flux_err_add)
         }
 
-        sim_map.spectrum = mean_spectrum[c]
+        sim_map.spectrum = mean_spectrum[i]
         model_flux = sim_map.flux(kwargs_sim["theta"])
         simulated_flux = model_flux + noise[noisetype]
 
@@ -285,10 +284,11 @@ def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, con
 
     return intrinsic_profiles, obskerns_norm
 
-def solve_IC14new(intrinsic_profiles, obskerns_norm, goodchips, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False):
+def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False):
     print("*** Using solver IC14new ***")
     # Can safely take means over chips now
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
+
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
     observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips
 
@@ -304,7 +304,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, goodchips, kwargs_IC14, kwa
     plot_IC14_map(bestparamgrid)
     if annotate:
         plt.text(-2,-1.3, 
-        f"""chip=averaged{goodchips} 
+        f"""chip=averaged{kwargs_fig['goodchips']} 
             solver=IC14new{kwargs_IC14['eqarea']} 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
@@ -315,7 +315,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, goodchips, kwargs_IC14, kwa
     plot_IC14_map(bestparamgrid_r) # derotated
     if annotate:
         plt.text(-2,-1.3, 
-        f"""chip=averaged{goodchips} 
+        f"""chip=averaged{kwargs_fig['goodchips']} 
             solver=IC14new{kwargs_IC14['eqarea']} 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
@@ -329,12 +329,12 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, goodchips, kwargs_IC14, kwa
     else:
         return bestparamgrid_r
 
-def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, goodchips, kwargs_run, kwargs_fig, annotate=False):
-    """Solve with bilinear solver"""
+def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False):
     print("*** Using solver LSD+starry_lin ***")
         
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
     observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+
     # preprae data
     pad = 100
     model_profile = 1. - np.concatenate((np.zeros(pad), mean_profile, np.zeros(pad)))
@@ -362,8 +362,8 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, goodchips, kwargs_ru
     map_av.show(ax=ax, projection="moll", image=image, colorbar=True)
     if annotate:
         ax.annotate(
-        f"""chip={goodchips} 
-            solver=LSD+starry_lin 
+        f"""chip={kwargs_fig['goodchips']}
+            solver=LSD+starry_lin
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['noisetype']} 
@@ -376,8 +376,10 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, goodchips, kwargs_ru
 def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=0.001, niter=5000, annotate=False):
     print("*** Using solver LSD+starry_opt ***")
     print(f"ydeg = {kwargs_run['ydeg']}")
+
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
     observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+
     # preprae data
     pad = 100
     model_profile = 1. - np.concatenate((np.zeros(pad), mean_profile, np.zeros(pad)))
@@ -448,28 +450,31 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     map_res.show(ax=ax, projection="moll", colorbar=True, cmap="plasma")
     if annotate:
         ax.annotate(
-        f"""solver=LSD+starry_opt(lr={lr}) 
-            \nnoise={kwargs_fig['noisetype']} 
-            \nerr_level={flux_err} 
-            \ncontrast={kwargs_fig['contrast']} 
-            \nlimbdark={kwargs_run['u1']}""",
+        f"""chip={kwargs_fig['goodchips']}
+            solver=LSD+starry_opt(lr={lr}) 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_run['u1']}""",
         xy=(-1.6, -1))
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.pdf", bbox_inches="tight", dpi=300)
     
     return map_res
 
-def solve_starry_lin(mean_spectrum, observed, goodchips, kwargs_run, kwargs_fig, annotate=False):
+def solve_starry_lin(mean_spectrum, observed, kwargs_run, kwargs_fig, annotate=False):
     print("*** Using solver starry_lin***")
+    goodchips = kwargs_fig['goodchips']
     nchip = len(goodchips)
+
     maps = [None for i in range(nchip)]
     images = []
-    for i,jj in enumerate(goodchips):
+    for i, jj in enumerate(goodchips):
         maps[i] = starry.DopplerMap(lazy=False, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
         maps[i].spectrum = mean_spectrum[i]
         maps[i][1] = kwargs_run['u1']
 
         try:
-            print(f"Solving chip {jj}... [{i+1}/{len(goodchips)}]")
+            print(f"Solving chip {jj}... [{i+1}/{nchip}]")
             soln = maps[i].solve(
                 flux=observed[:,i,:],
                 theta=kwargs_run['theta'],
@@ -493,21 +498,10 @@ def solve_starry_lin(mean_spectrum, observed, goodchips, kwargs_run, kwargs_fig,
         for i, map in enumerate(maps):
             imag = map.render(projection="moll")
             map.show(ax=axs[i], projection="moll", image=imag, colorbar=True)
+        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.pdf", bbox_inches="tight", dpi=300)
 
     # plot chip-averaged map
     images = np.array(images)
-
-    fig, ax = plt.subplots()
-    maps[0].show(ax=ax, projection="moll", image=np.median(images, axis=0), colorbar=True)
-    if annotate:
-        ax.annotate(
-        f"""chip=median{goodchips} 
-            solver=starry_lin 
-            noise={kwargs_fig['noisetype']} 
-            err_level={flux_err} 
-            contrast={kwargs_fig['contrast']} 
-            limbdark={kwargs_run['u1']}""",
-        xy=(-1.6, -1))
 
     fig, ax = plt.subplots()
     maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=True)
@@ -524,18 +518,21 @@ def solve_starry_lin(mean_spectrum, observed, goodchips, kwargs_run, kwargs_fig,
 
     return maps
 
-def solve_starry_opt(mean_spectrum, observed, nchip, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
+def solve_starry_opt(mean_spectrum, observed, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
     print("*** Using solver starry_opt ***")
-    print(nchip)
+    goodchips = kwargs_fig['goodchips']
+    nchip = len(goodchips)
+
     with pm.Model() as model:
         # The surface map
         A = starry.DopplerMap(ydeg=kwargs_run['ydeg']).sht_matrix(smoothing=0.075)
         p = pm.Uniform("p", lower=0.0, upper=1.0, shape=(A.shape[1],))
         y = tt.dot(A, p)
 
-        maps = [None for c in range(nchip)]
-        flux_models = [None for c in range(nchip)]
-        for i in range(nchip):
+        maps = [None for i in range(nchip)]
+        flux_models = [None for i in range(nchip)]
+        for i, jj in enumerate(goodchips):
+            print(f"Setting chip {jj} ({i+1}/{nchip})...")
             maps[i] = starry.DopplerMap(lazy=True, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
             maps[i][:, :] = y
             maps[i].spectrum = mean_spectrum[i]
@@ -545,7 +542,7 @@ def solve_starry_opt(mean_spectrum, observed, nchip, kwargs_run, kwargs_fig, lr=
 
             # Likelihood term
             pm.Normal(
-                f"obs{i}",
+                f"obs{jj}",
                 mu=tt.reshape(flux_models[i], (-1,)),
                 sd=flux_err,
                 observed=observed[:,i,:].reshape(-1,))
@@ -588,7 +585,8 @@ def solve_starry_opt(mean_spectrum, observed, nchip, kwargs_run, kwargs_fig, lr=
     map_res.show(ax=ax, projection="moll", colorbar=True)
     if annotate:
         ax.annotate(
-        f"""solver=starry_opt(lr={lr}) 
+        f"""chip={goodchips}
+            solver=starry_opt(lr={lr}) 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['contrast']} 
@@ -1077,7 +1075,7 @@ def solve_DIME(
         out, eout = an.lsq((observation_norm, np.ones(nobs*nk)), flatmodel, w=w_observation)
         sc_observation_norm = observation_norm * out[0] + out[1]
         fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
-        perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
+        perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, maxiter=1e4, bounds=bounds)
         # the metric to be minimized is (0.5*chisq - alpha*entropy)
         
         perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)

@@ -64,7 +64,7 @@ if config:
     ##############################################################################
 
     simulation_on = False
-    savedir = "igrinsH"
+    savedir = "igrinsK"
     use_toy_spec = False
 
     #################### Run settings ####################################
@@ -72,7 +72,7 @@ if config:
     flux_err = 0.01 if use_toy_spec else 0.025
     instru = "IGRINS"
     target = "W1049B"
-    band = "H"
+    band = "K"
     #solver = "IC14new"
     map_type = "eqarea"
     nobs = 14 if "W1049" in target else 7
@@ -174,22 +174,22 @@ if config:
 ##############################################################################
 
 assert simulation_on == False
-assert savedir == "igrinsH"
+assert savedir == "igrinsK"
 
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error = load_data(model_datafile, instru, nobs, goodchips)
 
 # Compute LSD mean profile
-#intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, rv, period, savedir)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, rv, period, savedir)
 
 # Solve by 5 solvers
-#bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=True)
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=True)
 
-#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
+LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
 
-#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=True)
+LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=True)
 
-#lin_map = solve_starry_lin(mean_spectrum, observed, kwargs_run, kwargs_fig, annotate=True)
+lin_map = solve_starry_lin(mean_spectrum, observed, kwargs_run, kwargs_fig, annotate=True)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
