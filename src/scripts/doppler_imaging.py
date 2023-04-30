@@ -1,0 +1,1311 @@
+# Functions for solving doppler maps using different pipelines.
+# Xueqing Chen 24.04.2023
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import starry
+import pickle
+import os
+from astropy.io import fits
+import scipy.constants as const
+from scipy import interpolate
+import paths
+
+import pymc3 as pm
+import pymc3_ext as pmx
+import theano.tensor as tt
+from tqdm import tqdm
+from matplotlib.colors import Normalize
+
+import analysis3 as an # for an.lsq and an.gfit
+import ELL_map_class as ELL_map
+import dime3 as dime # Doppler Imaging & Maximum Entropy, needed for various funcs
+
+#TODO: target should name as -> target+night, since can have several nights for one target 
+#TODO: run bands separately or together
+#TODO: test more parameters for starry solver
+#TODO: test sampling rate
+
+#global nobs, nchip, instru, goodchips, use_toy_spec, u1, theta, kwargs_sim, add_noise_when, noisetype, savedir, line_file, cont_file, factor, nk, rv, pmod, period
+#global phases, inc, vsini, LLD, nlat, nlon, use_eqarea, map_type, contrast, ydeg, udeg, kwargs_run
+################################################################################
+####################   Methods for workflow    #################################
+################################################################################
+
+def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec):
+    global wav_nm, wav0_nm, npix, npix0, flux_err
+    # Load model and data
+    with open(model_datafile, "rb") as f:
+        data = pickle.load(f, encoding="latin1")
+    lams = data["chiplams"][0] # in um
+    nchip, npix = lams.shape[0], lams.shape[1]
+    print(f"nobs: {nobs}, nchip: {nchip}, npix: {npix}")
+
+    observed = np.empty((nobs, nchip, npix))
+    template = np.empty((nobs, nchip, npix))
+    residual = np.empty((nobs, nchip, npix))
+    error = np.empty((nobs, nchip, npix))
+
+    if instru == "IGRINS":
+        for k in range(nobs):
+            for c, jj in enumerate(goodchips):
+                observed[k][c] = np.interp(
+                    lams[jj], 
+                    data["chiplams"][k][jj],
+                    data["fobs0"][k][jj] #/ data["chipcors"][k][c+firstchip],
+                )
+                template[k][c] = np.interp(
+                    lams[jj],
+                    data["chiplams"][k][jj],
+                    data["chipmodnobroad"][k][jj] #/ data["chipcors"][k][c+firstchip]
+                )
+                residual[k][c] = np.interp(
+                    lams[jj], 
+                    data["chiplams"][k][jj],
+                    data["fobs0"][k][jj] - data["chipmods"][k][jj]
+                )
+                error[k][c] = np.interp(
+                    lams[jj],
+                    data["chiplams"][k][jj],
+                    remove_spike(data["eobs0"][k][jj])
+                )
+
+    elif instru == "CRIRES":
+        for k in range(nobs):
+            for c, jj in enumerate(goodchips):
+                observed[k][c] = np.interp(
+                    lams[jj],
+                    data["chiplams"][k][jj],
+                    data["obs1"][k][jj] / data["chipcors"][k][jj],
+                )
+                template[k][c] = np.interp(
+                    lams[jj],
+                    data["chiplams"][k][jj],
+                    data["chipmodnobroad"][k][jj] / data["chipcors"][k][jj],
+                )
+                residual[k][c] = np.interp(
+                    lams[jj], 
+                    data["chiplams"][k][jj],
+                    data["obs1"][k][jj] - data["chipmods"][k][jj]
+                )
+
+    pad = 100
+    npix0 = len(lams[0])
+    npix = len(lams[0][pad:-pad])
+    wav_nm = np.zeros((nchip, npix))
+    wav0_nm = np.zeros((nchip, npix0))
+    mean_spectrum = np.zeros((nchip, npix0))
+    observed = observed[:, :, pad:-pad]
+    flux_err = eval(f'{error.mean():.3f}') if instru =="IGRINS" else 0.02
+
+    for c, jj in enumerate(goodchips):
+        wav_nm[c] = lams[jj][pad:-pad] * 1000 # um to nm
+        wav0_nm[c] = lams[jj] * 1000 # um to nm
+        if use_toy_spec:
+            toy_spec = (
+                1.0
+                - 0.50 * np.exp(-0.5 * (wav0_nm[c] - 2338) ** 2 / 0.03 ** 2)
+                - 0.60 * np.exp(-0.5 * (wav0_nm[c] - 2345) ** 2 / 0.03 ** 2)
+                - 0.20 * np.exp(-0.5 * (wav0_nm[c] - 2347) ** 2 / 0.03 ** 2)
+            )
+            for k in range(nobs):
+                template[k, c] = toy_spec
+            mean_spectrum[c] = toy_spec
+        mean_spectrum[c] = np.mean(template[:, c], axis=0)
+
+    print("mean_spectrum:", mean_spectrum.shape)
+    print("template:", template.shape)
+    print("observed:", observed.shape)
+    print(f"wav: {wav_nm.shape}, wav0: {wav0_nm.shape}")
+
+    return mean_spectrum, template, observed, residual, error
+
+def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, error, residual, 
+                     kwargs_sim, noisetype, savedir, plot_ts=False):
+
+    nchip = residual.shape[1]
+    # create fakemap
+    if modelmap == "1spot":
+        spot_brightness = 1 - contrast
+        print(f"Running spot contrast={spot_brightness}")
+        ### Read simulated map
+        im = np.mean(plt.imread(paths.data / 'modelmaps/1spot.png'), -1) # rgb to grayscale
+        pattern = np.where(im < np.mean(im))
+        fakemap = np.ones_like(im)
+        fakemap[pattern] = spot_brightness
+
+    elif modelmap == "1band":
+        print(f"Running band amp = {contrast}")
+        band_width = 15
+        band_lat = 30
+        amp = contrast
+        phase = 0.7 #0-1?
+        fakemap = np.ones((n_lat, n_lon))
+        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
+        fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
+        #fakemap[band_ind] -= amp
+        
+    elif modelmap == "2band":
+        print(f"Running band amp = {contrast}")
+        band_width = 10
+        band_lat = 45
+        band2_lat = 0
+        amp = contrast
+        phase = 0.55 
+        phase2 = 0.75
+        fakemap = np.ones((n_lat, n_lon))
+        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
+        fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
+        band2_ind = np.s_[(90-band2_lat)-band_width:(90-band2_lat)+band_width]
+        fakemap[band2_ind] += amp * np.sin((x[band2_ind]/360 - phase2) * 2*np.pi)
+
+    elif modelmap == "blank":
+        fakemap = np.ones((n_lat, n_lon))
+
+    fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
+
+    # Compute simulated flux
+    allchips_flux = []
+    for c in range(nchip):
+        sim_map = starry.DopplerMap(lazy=False, wav=wav_nm[c], wav0=wav0_nm[c], **kwargs_sim)
+        sim_map.load(maps=[fakemap], smoothing=smoothing)
+        sim_map[1] = kwargs_sim["u1"]
+
+        flux_err_add = 0.02
+        noise = {
+            "none": np.zeros(npix0),
+            "random": np.random.normal(np.zeros(npix0), flux_err),
+            "obserr": np.mean(error[:, c], axis=0),
+            "residual": np.mean(residual[:, c], axis=0),
+            "res+random": np.mean(residual[:, c], axis=0) + np.random.normal(np.zeros(npix0), flux_err_add)
+        }
+
+        sim_map.spectrum = mean_spectrum[c]
+        model_flux = sim_map.flux(kwargs_sim["theta"])
+        simulated_flux = model_flux + noise[noisetype]
+
+        allchips_flux.append(simulated_flux)
+
+    allchips_flux = np.array(allchips_flux)
+
+    fig, ax = plt.subplots()
+    sim_map.show(ax=ax, projection="moll", colorbar=True)
+    plt.savefig(paths.figures / f"{savedir}/fakemap.pdf", bbox_inches="tight", dpi=300)
+
+    if plot_ts:
+        plot_timeseries(sim_map, model_flux, obsflux=simulated_flux, overlap=2)
+
+    observed = np.transpose(allchips_flux, axes=(1,0,2))
+
+    return observed
+
+def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, rv, period, savedir, pad=100):
+    global wav_angs, err_LSD_profiles, dbeta
+    print(instru)
+    nobs = observed.shape[0]
+    nchip = len(goodchips)
+    # Read daospec linelist
+    lineloc, lineew, _ = dao_getlines(line_file)
+    pspec_cont = fits.getdata(cont_file)
+    hdr_pspec_cont = fits.getheader(cont_file)
+    wspec = hdr_pspec_cont['crval1'] + np.arange(pspec_cont.size)*hdr_pspec_cont['cdelt1']
+    factor = 1e11 if "t1" in pmod else 1e5 # don't know why different model needs scaling with a factor
+    pspec_cont = pspec_cont/factor
+    spline = interpolate.UnivariateSpline(wspec, pspec_cont, s=0.0, k=1.0) #set up interpolation over the continuum measurement
+    plt.figure(figsize=(6,1))
+    plt.plot(wspec, pspec_cont)
+    plt.title("daospec continuum")
+    #plt.show()
+
+    wav_angs = np.array(wav_nm) * 10 #convert nm to angstroms
+
+    # Compute LSD velocity grid:
+    dbeta = np.diff(wav_angs).mean()/wav_angs.mean()
+    dx = - dbeta * np.arange(np.floor(-nk/2.+.5), np.floor(nk/2.+.5))
+    dv = const.c*dx / 1e3 # km/s
+
+    # Compute LSD:
+    kerns = np.zeros((nobs, nchip, nk), dtype=float)
+    modkerns = np.zeros((nobs, nchip, nk), dtype=float)
+    deltaspecs = np.zeros((nobs, nchip, npix), dtype=float)
+    for i, jj in enumerate(goodchips): 
+        print("chip", jj)
+        for kk in range(nobs):
+            shift = 1. + rv  # best rv shift for Callie is 9e-5
+            deltaspec = make_deltaspec(lineloc*shift, lineew, wav_angs[i], verbose=False, cont=spline(wav_angs[i]))
+            m,kerns[kk,i],b,c = dsa(deltaspec, observed[kk,i], nk)
+            m,modkerns[kk,i],b,c = dsa(deltaspec, template[kk,i,pad:-pad], nk) 
+            deltaspecs[kk,i] = deltaspec
+
+    # Plot lines vs. model
+    plt.figure(figsize=(15, 2*nchip))
+    t=0
+    for i, jj in enumerate(goodchips):
+        plt.subplot(nchip,1,i+1)
+        plt.plot(wav_angs[i], deltaspecs[t,i], linewidth=0.5, color='C0', label="deltaspec")
+        plt.plot(wav_angs[i], template[t,i,pad:-pad], linewidth=0.6, color='C1', label="chipmodnobroad")
+        plt.plot(wav_angs[i], observed[t,i], linewidth=0.6, color='k', label="obs")
+        plt.text(x=wav_angs[i].min()-10, y=0, s=f"order={jj}")
+        if i==0:
+            plt.title(f"{pmod} model vs. lines at t={t}")
+    plt.legend(loc=4, fontsize=9)
+    #plt.show()
+    plt.savefig(paths.output / "LSD_deltaspecs.pdf")
+    
+    # plot kerns before shift fix
+    plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
+    plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
+
+    # shift kerns to center
+    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, nobs, nk, dv, sim=simulation_on)
+    
+    # Plot kerns after shift fix
+    #plot_kern_timeseries(kerns, goodchips, nobs, nchip, dv, gap=0.02)
+    #plot_kern_timeseries(modkerns, goodchips, nobs, nchip, dv, gap=0.1)
+
+    err_LSD_profiles = np.median(kerns.mean(1).std(0)) 
+    # the error level across different obs of the chip-avged profile, median over nk pixels
+
+    # normalize kerns
+    obskerns_norm = cont_normalize_kerns(kerns, instru)
+    
+    # plot kerns + intrinsic_profile
+    intrinsic_profiles = np.array([modkerns[:,i].mean(0) for i in range(nchip)])
+    plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.03, normed=True, intrinsic_profiles=intrinsic_profiles)
+    
+    ### Plot averaged line shapes
+    s = 20 if instru != "CRIRES" else 60
+    aspect = 1.5 if instru != "CRIRES" else 1
+    plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, s, savedir, gap=0.02)
+
+    ### Plot deviation map for each chip and mean deviation map
+    plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir, meanby="median")
+
+    return intrinsic_profiles, obskerns_norm
+
+def solve_IC14new(intrinsic_profiles, obskerns_norm, goodchips, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False):
+    print("*** Using solver IC14new ***")
+    # Can safely take means over chips now
+    nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
+    mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
+    observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips
+
+    bestparamgrid = solve_DIME(
+        observation_norm, mean_profile,
+        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True
+    )
+
+    bestparamgrid_r = np.roll(
+        np.flip(bestparamgrid, axis=1), int(0.5*bestparamgrid.shape[1]), axis=1)
+    # TODO: derotate map??? seems like Ic14 maps are flipped and rolled 180 deg
+
+    plot_IC14_map(bestparamgrid)
+    if annotate:
+        plt.text(-2,-1.3, 
+        f"""chip=averaged{goodchips} 
+            solver=IC14new{kwargs_IC14['eqarea']} 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_IC14['LLD']}""",
+        fontsize=8)
+
+    plot_IC14_map(bestparamgrid_r) # derotated
+    if annotate:
+        plt.text(-2,-1.3, 
+        f"""chip=averaged{goodchips} 
+            solver=IC14new{kwargs_IC14['eqarea']} 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_IC14['LLD']}""",
+        fontsize=8)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.pdf", bbox_inches="tight", dpi=300)
+
+    if ret_both:
+        return bestparamgrid_r, bestparamgrid
+    else:
+        return bestparamgrid_r
+
+def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, goodchips, kwargs_run, kwargs_fig, annotate=False):
+    """Solve with bilinear solver"""
+    print("*** Using solver LSD+starry_lin ***")
+        
+    mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
+    observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+    # preprae data
+    pad = 100
+    model_profile = 1. - np.concatenate((np.zeros(pad), mean_profile, np.zeros(pad)))
+    dlam = np.diff(wav_angs[0]).mean() / 10 # angstrom to nm
+    lam_ref = wav_angs[0].mean() / 10 # angstrom to nm
+    nw = len(model_profile)
+    wav0_lsd = np.linspace(start=lam_ref-0.5*dlam*nw, stop=lam_ref+0.5*dlam*nw, num=nw)
+    wav_lsd = wav0_lsd[pad:-pad]
+    
+    map_av = starry.DopplerMap(lazy=False, wav=wav_lsd, wav0=wav0_lsd, **kwargs_run)
+    map_av.spectrum = model_profile
+    map_av[1] = kwargs_run['u1']
+
+    soln = map_av.solve(
+        flux=np.flip(observation_norm, axis=1),
+        theta=kwargs_run['theta'],
+        normalized=True,
+        fix_spectrum=True,
+        flux_err=flux_err,
+        quiet=os.getenv("CI", "false") == "true",
+    )
+
+    image = map_av.render(projection="moll")         
+    fig, ax = plt.subplots()
+    map_av.show(ax=ax, projection="moll", image=image, colorbar=True)
+    if annotate:
+        ax.annotate(
+        f"""chip={goodchips} 
+            solver=LSD+starry_lin 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['noisetype']} 
+            limbdark={kwargs_run['u1']}""",
+        xy=(-1.6, -1))
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.pdf", bbox_inches="tight", dpi=300)
+
+    return map_av
+
+def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=0.001, niter=5000, annotate=False):
+    print("*** Using solver LSD+starry_opt ***")
+    print(f"ydeg = {kwargs_run['ydeg']}")
+    mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
+    observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+    # preprae data
+    pad = 100
+    model_profile = 1. - np.concatenate((np.zeros(pad), mean_profile, np.zeros(pad)))
+    dlam = np.diff(wav_angs[0]).mean() / 10 # angstrom to nm
+    lam_ref = wav_angs[0].mean() / 10 # angstrom to nm
+    nw = len(model_profile)
+    wav0_lsd = np.linspace(start=lam_ref-0.5*dlam*nw, stop=lam_ref+0.5*dlam*nw, num=nw)
+    wav_lsd = wav0_lsd[pad:-pad]
+
+    with pm.Model() as model:
+        # The surface map
+        A = starry.DopplerMap(ydeg=kwargs_run['ydeg']).sht_matrix(smoothing=0.075)
+        p = pm.Uniform("p", lower=0.0, upper=1.0, shape=(A.shape[1],))
+        y = tt.dot(A, p)
+
+        map_pm = starry.DopplerMap(lazy=True, wav=wav_lsd, wav0=wav0_lsd, **kwargs_run)
+
+        map_pm[:, :] = y
+        map_pm.spectrum = model_profile
+        map_pm[1] = kwargs_run['u1']
+
+        model_flux = map_pm.flux(theta=kwargs_run['theta'], normalize=True)
+
+        # Likelihood term
+        pm.Normal(
+            f"obs",
+            mu=tt.reshape(model_flux, (-1,)),
+            sd=flux_err,
+            observed=np.flip(observation_norm,axis=1).reshape(-1,)
+        )
+
+    # Optimize!
+    loss = []
+    best_loss = np.inf
+    map_soln = model.test_point
+    iterator = tqdm(
+        pmx.optim.optimize_iterator(pmx.optim.Adam(lr=lr), niter, start=map_soln),
+        total=niter,
+        disable=os.getenv("CI", "false") == "true",
+    )
+    with model:
+        for obj, point in iterator:
+            iterator.set_description(
+                "loss: {:.3e} / {:.3e}".format(obj, best_loss)
+            )
+            loss.append(obj)
+            if obj < best_loss:
+                best_loss = obj
+                map_soln = point
+
+    # Plot the loss
+    fig, ax = plt.subplots(1, figsize=(3, 3))
+    ax.plot(loss[int(len(loss)/20):])
+    ax.set_xlabel("iteration number")
+    ax.set_ylabel("loss")
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.pdf", bbox_inches="tight", dpi=300)
+
+    # Plot the MAP map
+    map_res = starry.Map(kwargs_run['ydeg'], kwargs_run['udeg'], inc=kwargs_run['inc'])
+    map_res[1] = kwargs_run['u1']
+    image = map_res.render(projection="moll")
+
+    with model:
+        y_map = pmx.eval_in_model(y, point=map_soln)
+
+    map_res[:, :] = y_map   # The spherical harmonic coefficient vector. 
+    fig, ax = plt.subplots()
+    map_res.show(ax=ax, projection="moll", colorbar=True, cmap="plasma")
+    if annotate:
+        ax.annotate(
+        f"""solver=LSD+starry_opt(lr={lr}) 
+            \nnoise={kwargs_fig['noisetype']} 
+            \nerr_level={flux_err} 
+            \ncontrast={kwargs_fig['contrast']} 
+            \nlimbdark={kwargs_run['u1']}""",
+        xy=(-1.6, -1))
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.pdf", bbox_inches="tight", dpi=300)
+    
+    return map_res
+
+def solve_starry_lin(mean_spectrum, observed, goodchips, kwargs_run, kwargs_fig, annotate=False):
+    print("*** Using solver starry_lin***")
+    nchip = len(goodchips)
+    maps = [None for i in range(nchip)]
+    images = []
+    for i,jj in enumerate(goodchips):
+        maps[i] = starry.DopplerMap(lazy=False, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
+        maps[i].spectrum = mean_spectrum[i]
+        maps[i][1] = kwargs_run['u1']
+
+        try:
+            print(f"Solving chip {jj}... [{i+1}/{len(goodchips)}]")
+            soln = maps[i].solve(
+                flux=observed[:,i,:],
+                theta=kwargs_run['theta'],
+                normalized=True,
+                fix_spectrum=True,
+                flux_err=flux_err,
+                quiet=os.getenv("CI", "false") == "true",
+            )
+            imag = maps[i].render(projection="moll")
+            images.append(imag)
+
+            print("Success!")
+        
+        except:
+            print(f"Solver failed for chip {jj}, moving onto next chip...")
+            continue
+
+    # plot map of each chip
+    if nchip > 1:
+        fig, axs = plt.subplots(nchip, 1)
+        for i, map in enumerate(maps):
+            imag = map.render(projection="moll")
+            map.show(ax=axs[i], projection="moll", image=imag, colorbar=True)
+
+    # plot chip-averaged map
+    images = np.array(images)
+
+    fig, ax = plt.subplots()
+    maps[0].show(ax=ax, projection="moll", image=np.median(images, axis=0), colorbar=True)
+    if annotate:
+        ax.annotate(
+        f"""chip=median{goodchips} 
+            solver=starry_lin 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_run['u1']}""",
+        xy=(-1.6, -1))
+
+    fig, ax = plt.subplots()
+    maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=True)
+    if annotate:
+        ax.annotate(
+        f"""chip=median{goodchips} 
+            solver=starry_lin 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_run['u1']}""",
+        xy=(-1.6, -1))
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.pdf", bbox_inches="tight", dpi=300)
+
+    return maps
+
+def solve_starry_opt(mean_spectrum, observed, nchip, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
+    print("*** Using solver starry_opt ***")
+    print(nchip)
+    with pm.Model() as model:
+        # The surface map
+        A = starry.DopplerMap(ydeg=kwargs_run['ydeg']).sht_matrix(smoothing=0.075)
+        p = pm.Uniform("p", lower=0.0, upper=1.0, shape=(A.shape[1],))
+        y = tt.dot(A, p)
+
+        maps = [None for c in range(nchip)]
+        flux_models = [None for c in range(nchip)]
+        for i in range(nchip):
+            maps[i] = starry.DopplerMap(lazy=True, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
+            maps[i][:, :] = y
+            maps[i].spectrum = mean_spectrum[i]
+            maps[i][1] = kwargs_run['u1']
+
+            flux_models[i] = maps[i].flux(theta=kwargs_run['theta'], normalize=True)
+
+            # Likelihood term
+            pm.Normal(
+                f"obs{i}",
+                mu=tt.reshape(flux_models[i], (-1,)),
+                sd=flux_err,
+                observed=observed[:,i,:].reshape(-1,))
+
+    # Optimize!
+    loss = []
+    best_loss = np.inf
+    map_soln = model.test_point
+    iterator = tqdm(
+        pmx.optim.optimize_iterator(pmx.optim.Adam(lr=lr), niter, start=map_soln),
+        total=niter,
+        disable=os.getenv("CI", "false") == "true",
+    )
+    with model:
+        for obj, point in iterator:
+            iterator.set_description(
+                "loss: {:.3e} / {:.3e}".format(obj, best_loss)
+            )
+            loss.append(obj)
+            if obj < best_loss:
+                best_loss = obj
+                map_soln = point
+
+    # Plot the loss
+    fig, ax = plt.subplots(1, figsize=(3, 3))
+    ax.plot(loss[int(len(loss)/10):])
+    ax.set_xlabel("iteration number")
+    ax.set_ylabel("loss")
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5_loss.pdf", bbox_inches="tight", dpi=300)
+
+    # Plot the MAP map
+    map_res = starry.Map(**kwargs_run)
+    map_res[1] = kwargs_run['u1']
+
+    with model:
+        y_map = pmx.eval_in_model(y, point=map_soln)
+
+    map_res[:, :] = y_map   # The spherical harmonic coefficient vector. 
+    fig, ax = plt.subplots()
+    map_res.show(ax=ax, projection="moll", colorbar=True)
+    if annotate:
+        ax.annotate(
+        f"""solver=starry_opt(lr={lr}) 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_run['u1']}""",
+        xy=(-1.6, -1))
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.pdf", bbox_inches="tight", dpi=300)
+
+    return map_res
+
+
+################################################################################
+####################   Utils    ################################################
+################################################################################
+
+def dao_getlines(f_linelist):
+    """
+    Read the line locations and equivalent widths from a DAOSPEC output file.
+
+    Example:
+      f_linelist = 'model_spec.clines'
+      (lineloc, lineew, linespec) = getlines(f_linelist)
+    """
+    #2009-02-22 10:15 IJC: Initiated
+
+    # Get the line locations and EWs:
+    with open(f_linelist, 'r') as f:
+        raw = f.readlines()
+
+    #EB - this loop gets the form needed
+    dat = np.zeros([len(raw), 2], dtype=float)                                                 
+    for i, line in enumerate(raw):                                         
+        dat[i,:]= list(map(float, line.split()[0:2]))
+
+    lineloc = dat[:,0]
+    lineew = dat[:,1]/1e3
+    linespec = [line.split()[-1] for line in raw]
+    return (lineloc, lineew, linespec)
+
+def make_deltaspec(loc, ew, win, **kw):
+    """
+    Create a delta-function line spectrum based on a wavelength grid
+    and a list of line locations and equivalent widths.
+
+    :INPUTS:
+       loc -- location of lines in the emission frame of reference
+
+       ew  -- equivalent widths of lines, in units of wavelength grid.
+               Positive values are emission lines.
+
+       w_in -- wavelength grid in the emission frame, with values
+              monotonically increasing (best if it is linearly spaced)
+
+       All inputs should be lists or one-dimensional arrays of scalars
+
+    :OPTIONAL_INPUTS:
+       cont=None -- set continuum values in the emission frame;
+
+       nearest=False  -- if True, use full pixels instead of partial
+
+       verbose=False  -- if True, print out various messages
+
+    :OUTPUTS:
+      s  -- delta-function line spectrum, with a continuum level of zero
+    
+    :EXAMPLE: (NEEDS TO BE UPDATED!):
+       ::
+
+          w   = [2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7]
+          loc = [2.1, 2.35, 2.62]
+          ew  = [0.1, .02, .01]
+          s = linespec(loc, ew, w)
+          print s  #  --->  [0, 1, 0, 0.1, 0.1, 0, 0.08, 0.02]
+
+    :NOTE:  This may give incorrect results for saturated lines.
+    """
+    # 2008-12-05 13:31 IJC: Created
+    # 2008-12-10 13:30 IJC: Added continuum option, reworked code some.
+    # 2008-12-12 12:33 IJC: Removed RV option
+
+    #from pylab import find
+    from numpy import where as find
+
+    # Check inputs
+    loc = np.array(loc).copy().ravel()
+    ew  = np.array(ew ).copy().ravel()
+    win = np.array(win).copy().ravel()
+
+    defaults = dict(cont=None, nearest=False, verbose=False)
+    for key in defaults:
+        #if (not kw.has_key(key)): #EB - This method does not work in python3
+        if (not key in kw): #EB update
+            kw[key] = defaults[key]
+    verbose = bool(kw['verbose'])
+    nearest = bool(kw['nearest'])
+    contset = kw['cont']!=None
+
+    if contset.all(): #EB update .all() to work in python3
+        cont = np.array(kw['cont']).copy()
+        if len(cont)!=len(win):
+            print( "Wavelength grid and continuum must have the same length!")
+            return -1
+    else:
+        cont = np.ones(win.shape)
+
+    nlines = len(loc)
+    if nlines != len(ew):
+        if verbose:  print( "len(loc)>>" + str(len(loc)))
+        if verbose:  print( "len(ew)>>" + str(len(ew)))
+        print( "Line locations and equivalent widths must have same length!")
+        return -1
+
+    #Only use lines in the proper wavelength range
+    nlineinit = len(loc)
+    lind = (loc>=win.min()) * (loc<=win.max())
+    loc = loc[lind]
+    ew  =  ew[lind]
+    nlines = len(loc)
+
+    s = cont.copy()
+    d = np.diff(win).mean()
+
+    if verbose:  print( "s>>" + str(s))
+
+    for ii in range(nlines):
+        lineloc = loc[ii]
+        lineew  = ew[ii]
+        index = (win<lineloc).sum() - 1
+        if nearest:
+            s[index+1] = s[index]-cont[index]*lineew/d
+        elif index==len(win):
+            s[index] = s[index] - cont[index]*lineew/d
+        else:
+            s[index] = s[index] - lineew*cont[index]* \
+                (win[index+1] - lineloc)/d/d
+            s[index+1] = s[index+1] - lineew*cont[index+1] * \
+                (lineloc - win[index])/d/d
+        
+        if verbose:  
+            print( "(lineloc, lineew)>>" + str((lineloc, lineew)))
+            print( "(index, d)>>" + str((index,d)))
+
+    if verbose:
+        print( "(nlineinit, nline)>>" + str((nlineinit, nlines)))
+    return s
+
+def rconvolve1d(a, b, mode='valid', extend='nearest'):
+    """
+    Compute a 1D reverse convolution in the style of Bramich 2008.
+
+    :INPUTS:
+        'a' should be longer than 'b' -- i.e., 'b' is the kernel.
+        'extend' tells how to extend the boundaries -- either
+        'nearest'-neighbor or a number
+
+    :NOTES:
+      This is "reversed" from the canonical definition of the convolution.
+
+    :SEE_ALSO:   
+      :func:`dsa`
+    """
+    # 2008-11-14 18:26 IJC: Created
+    na = len(a)
+    nb = len(b)
+    n = max(na, nb)
+    
+    dx = int(np.floor(nb/2))
+
+    if extend=='nearest':
+        X = a[-1]
+    else:
+        X = extend
+
+    a2 = X + np.zeros(na+nb-1, dtype=float)
+    a2[dx:dx+na] = a
+    #a2 = concatenate((a, X + zeros(nb-1)))
+    #c = zeros(n, dtype='float')
+    
+    bmat = np.tile(b, (n,1))
+    amat = np.zeros((n, nb), dtype='float')
+    for ii in range(na):
+        amat[ii,:] = a2[range(ii,ii+nb)]
+
+    c = np.sum(amat * bmat, axis=1)
+        
+    return c
+
+def dsa(r, i, Nk, **kw): #, w=None, verbose=False, noback=False):
+    """
+    Computational tool for Difference Spectral Analysis (DSA)
+    
+    :INPUTS:
+       R -- reference spectrum.  This should have the highest possible
+            signal-to-noise and the highest spectral resolution.
+       I -- Current spectrum to be analysed.
+       Nk -- number of pixels in the desired convolution kernel
+
+    :OPTIONS:
+       w       -- weights of the pixel values in I; typically (sigma)^-2
+           (Not HANDELED CORRECTLY?!?!?)
+       noback  -- do not fit for a variable background; assume constant.
+       tol=1e-10 -- if matrix determinant is less than tol, use
+                    pseudoinverse rather than straight matrix
+                    inversion
+       verbose -- Print output statements and make a plot or two
+       retinv -- return a fourth output, the Least Squares inverse
+                 matrix (False by default)
+
+    :OUTPUTS:       (M, K, B, C):
+       M -- R, convolved to match I
+       K -- kernel used in convolution
+       B -- background offset
+       C -- chisquared of fit. If no weights were specified, weights
+            are set to unity for this calculation.
+
+    :OPTIONS:
+       I -- inverse matrix
+
+    :NOTES:
+        Best results are obtained with proper registration of the spectra.
+        Also, beware of edge effects.  As a general rule, anything within
+        a kernel width of the edges is suspect.
+        Also
+
+    :SEE_ALSO:  
+       :func:`dsamulti`    """
+#    """Testing Bramich's algorithm for 1D spectra."""
+#    Based on the 2D Bramich (2008) DIA algorithm
+#    -----
+#    2008-11-14 10:56 IJC: Created @ UCLA.
+#    2008-11-18 11:12 IJC: Registration now works correctly
+#    2008-12-09 16:10 IJC: Somewhat optimized
+#    2009-02-26 22:06 IJC: Added retinv, changed optional input format
+
+    defaults = dict(verbose=False, w=None, noback=False, tol=1e-10, \
+                        retinv=False)
+    for key in defaults:
+        if (not (key in kw)):
+            kw[key] = defaults[key]
+    verbose = bool(kw['verbose'])
+    noback = bool(kw['noback'])
+    retinv = bool(kw['retinv'])
+    w = kw['w']
+    if verbose:
+        print( "kw>>" + str(kw))
+
+    if noback:
+        if verbose: print( "Not fitting for a variable background...")
+
+    tol = 1e-10  # tolerance for singularity
+
+    r = np.array(r, copy=True)
+    i = np.array(i, copy=True)
+    Nk = int(Nk)  # length of kernel
+    dx = int(np.floor(Nk/2))
+
+    if w==None:
+        w = np.ones(len(r), dtype=float)
+
+    Nr = len(r)  # length of Referene
+    ind = np.arange(Nr-Nk+1, dtype=int)
+    wind = w[ind]
+        
+    if noback:    
+        U = np.zeros((Nk,Nk), dtype=float)
+        b = np.zeros(Nk, dtype=float)
+    else:
+        U = np.zeros((Nk+1,Nk+1), dtype=float)
+        b = np.zeros(Nk+1, dtype=float)
+
+    # Build the b vector and U matrix
+    tempval0 = w[ind+dx] * i[ind+dx]
+    for p in range(Nk):
+        b[p] = (tempval0 * r[ind+p]).sum()
+        tempval2 = wind*r[ind+p]
+        for q in range(p, Nk):
+            U[p,q] = (tempval2 * r[ind+q]).sum()
+            U[q,p] = U[p,q]
+
+    if not noback:
+        b[Nk] = (w[ind+dx] * i[ind+dx]).sum()
+        for q in range(Nk):
+            U[Nk, q] = (wind * r[ind+q]).sum()
+            U[q, Nk] = U[Nk, q]
+
+        U[Nk,Nk] = wind.sum()
+    
+    detU = np.linalg.det(U)
+    if verbose: print( "det(U) is:  " + str(detU))
+
+    if detU<tol:
+        print( "Singular matrix: det(U) < tol.  Using pseudoinverse...")
+        if verbose: 
+            print( 'U>>',U)
+        invmat = np.linalg.pinv(U)
+    else:
+        invmat = np.linalg.inv(U)
+
+    a = np.dot(invmat, b)
+
+    if noback:
+        K = a
+        B0 = 0.0
+    else:
+        K = a[0:len(a)-1]
+        B0 = a[-1]
+
+    m = rconvolve1d(r, K, mode='valid') + B0
+
+    chisq  = ( wind * (i[ind] - m[ind])**2 ).sum()
+
+    if verbose:
+        chisq0 = ( wind * (i[ind] - r[ind])**2 ).sum()
+        #print "Kernel is:  " + str(K)
+        print( "Background: " + str(B0))
+        print( "For the (" + str(Nr) + " - " + str(Nk+1) + ") = " + str(Nr-Nk-1) + " DOF:")
+        print( "Red. Chisquared (I-R): " + str(chisq0/(Nr-Nk-1)))
+        print( "Red. Chisquared (I-M): " + str(chisq/(Nr-Nk-1)))
+    
+        plt.figure(); plt.subplot(311)
+        plt.plot(r, '--'); plt.plot(i, '-x'); plt.plot(m, '-..'); plt.legend('RIM'); 
+        plt.subplot(312); plt.plot(r - i, '--'); plt.plot(m - i); plt.legend(['R-I', 'M-I'])
+        plt.subplot(313); plt.plot(K, '-o'); plt.grid('on'); plt.legend(['Kernel']); 
+
+    if retinv:
+        return (m, K, B0, chisq, invmat)
+    else:
+        return (m, K, B0, chisq)
+
+def plot_timeseries(map, modelspec, obsflux=None, overlap=8.0, figsize=(5, 11.5)):
+    # Plot the "Joy Division" graph
+    fig = plt.figure(figsize=figsize)
+    ax_img = [
+        plt.subplot2grid((map.nt, 8), (t, 0), rowspan=1, colspan=1)
+        for t in range(map.nt)
+    ]
+    ax_f = [plt.subplot2grid((map.nt, 8), (0, 1), rowspan=1, colspan=7)]
+    ax_f += [
+        plt.subplot2grid(
+            (map.nt, 8),
+            (t, 1),
+            rowspan=1,
+            colspan=7,
+            sharex=ax_f[0],
+            sharey=ax_f[0],
+        )
+        for t in range(1, map.nt)
+    ]
+
+    for t in range(map.nt):
+        map.show(theta=theta[t], ax=ax_img[t], res=300)
+
+        for l in ax_img[t].get_lines():
+            if l.get_lw() < 1:
+                l.set_lw(0.5 * l.get_lw())
+                l.set_alpha(0.75)
+            else:
+                l.set_lw(1.25)
+        ax_img[t].set_rasterization_zorder(100)
+
+        # plot the obs data points
+        if obsflux is not None:
+            ax_f[t].plot(obsflux[t] - modelspec[t, 0], "k.",
+                        ms=0.5, alpha=0.75, clip_on=False, zorder=-1)
+        # plot the spectrum
+        ax_f[t].plot(modelspec[t] - modelspec[t, 0], "C1-", lw=0.5, clip_on=False)
+
+        ax_f[t].set_rasterization_zorder(0)
+    fac = (np.max(modelspec) - np.min(modelspec)) / overlap
+    ax_f[0].set_ylim(-fac, fac)
+ 
+def plot_map_cells(map_obj):
+    fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111, projection="mollweide")
+    ax.grid(True)
+    good = (map_obj.projected_area>0)
+    for k in range(map_obj.ncell):
+        lats = map_obj.corners_latlon[k][0]
+        lons = map_obj.corners_latlon[k][1]
+
+        y = np.array([lats[0], lats[1], lats[3], lats[2]]) - np.pi/2
+        x = np.array([lons[0], lons[1], lons[3], lons[2]]) - np.pi
+        # Plot the polygon
+        if good[k]:
+            poly = plt.Polygon(np.column_stack((x, y)), facecolor='gray', edgecolor='black')
+            ax.add_patch(poly)
+            ax.text(x.mean(), y.mean(), f"{k}", size=5)
+        ax.text(x.mean()-0.1, y.mean()-0.07, f"a:{map_obj.projected_area[k]:.3f}", size=3)
+
+    # Set plot parameters
+    ax.set_xticklabels([30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330], fontsize=8)
+
+def solve_DIME(
+        observation_norm: np.ndarray, 
+        mean_profile: np.ndarray,
+        dbeta: float, 
+        nk: int, nobs: int, 
+        phases: np.ndarray, 
+        inc: float, vsini: float, LLD: float, 
+        eqarea: bool = True,
+        nlat: int = 20, nlon: int = 40,
+        alpha: int = 4500, ftol: float = 0.01,
+        plot_cells: bool = False,
+        plot_unstretched_map: bool = False
+) -> np.ndarray:
+    """
+    Copied from IC14orig except kerns used to compute weights should take 
+    input from cen_kerns (profiles centered to rv=0).
+    ***inc in degrees (90 <-> equator-on).***
+
+    Parameters
+    ----------
+    observation_norm : 1darray, shape=(nk*nobs)
+        The raveled observed line profiles (kerns).
+
+    mean_profiles : 1darray, shape=(nk)
+        The chip-averaged model line profile (modekerns).
+
+    dbeta: float
+        d_lam/lam_ref of the wavelength range that the line profile sits on.
+
+    nk: int
+        Size of line profile kernel.
+
+    nobs: int
+        Number of observations.
+
+    phases: 1darray, shape=(nobs)
+        Phases corresponding to the obs timesteps. In radian (0~2*pi).
+
+    inc: float
+        Inclination of star in degrees (common definition, 90 is equator-on)
+
+    Returns
+    -------
+    bestparamgrid: 2darray, shape=(nlon, nlat)
+        Optimized surface map. 
+        Cells corresponding to longitude 0~2*pi, latitude 0~pi.
+
+    """
+    ### Prepare data for DIME
+    modIP = 1. - np.concatenate((np.zeros(300), mean_profile, np.zeros(300)))
+    modDV = - np.arange(np.floor(-modIP.size/2.+.5), np.floor(modIP.size/2.+.5)) * dbeta * const.c / 1e3
+    flineSpline2 = interpolate.UnivariateSpline(modDV[::-1], modIP[::-1], k=1., s=0.)
+    dv = -dbeta * np.arange(np.floor(-nk/2.+.5), np.floor(nk/2.+.5)) * const.c / 1e3 # km/s
+
+    ### Reconstruct map
+
+    # initialize Doppler map object
+    inc_ = (90 - inc) * np.pi / 180 # IC14 defined 0 <-> equator-on, pi/2 <-> face-on
+    if eqarea:
+        mmap = ELL_map.map(nlat=nlat, nlon=nlon, type='eqarea', inc=inc_)
+    else:
+        mmap = ELL_map.map(nlat=nlat, nlon=nlon, inc=inc_) #ELL_map.map returns a class object
+    if plot_cells:
+        plot_map_cells(mmap)
+    ncell = mmap.ncell
+    nx = ncell
+    dime.setup(observation_norm.size, nk)
+    flatguess = 100*np.ones(nx)
+    bounds = [(1e-6, 300)]*nx
+    allfits = []
+
+    # Compute R matrix
+    Rmatrix = np.zeros((ncell, nobs*dv.size), dtype=np.float32) 
+    for kk, rot in enumerate(phases):
+        speccube = np.zeros((ncell, dv.size), dtype=np.float32) 
+        if eqarea:
+            this_map = ELL_map.map(nlat=nlat, nlon=nlon, type='eqarea', inc=inc_, deltaphi=-rot)
+        else:
+            this_map = ELL_map.map(nlat=nlat, nlon=nlon, inc=inc_, deltaphi=-rot)
+        this_doppler = 1. + vsini*this_map.visible_rvcorners.mean(1)/const.c/np.cos(inc_) # mean rv of each cell in m/s
+        good = (this_map.projected_area>0) * np.isfinite(this_doppler)
+        for ii in good.nonzero()[0]:
+            speccube[ii,:] = flineSpline2(dv + (this_doppler[ii]-1)*const.c/1000.)
+        limbdarkening = (1. - LLD) + LLD * this_map.mu
+        Rblock = speccube * ((limbdarkening*this_map.projected_area).reshape(this_map.ncell, 1)*np.pi/this_map.projected_area.sum())
+        Rmatrix[:,dv.size*kk:dv.size*(kk+1)] = Rblock
+
+    flatmodel = dime.normalize_model(np.dot(flatguess, Rmatrix), nk)
+
+    if len(allfits)==0:  # Properly scale measurement weights:
+        minfm = flatmodel.min()
+        cutoffval = 1. - (1. - minfm) / 22.
+        w_observation = (flatmodel < cutoffval).astype(float) / err_LSD_profiles**2
+        # Scale the observations to match the model's equivalent width:
+        out, eout = an.lsq((observation_norm, np.ones(nobs*nk)), flatmodel, w=w_observation)
+        sc_observation_norm = observation_norm * out[0] + out[1]
+        fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
+        perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
+        # the metric to be minimized is (0.5*chisq - alpha*entropy)
+        
+        perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
+        w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
+
+    ### Solve!
+    fitargs = (sc_observation_norm, w_observation, Rmatrix, alpha)
+    bfit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
+    allfits.append(bfit)
+    bestparams = bfit[0]
+    #model_observation = dime.normalize_model(np.dot(bestparams, Rmatrix), nk)
+    #metric, chisq, entropy = dime.entropy_map_norm_sp(bestparams, *fitargs, retvals=True)
+
+    # reshape into grid
+    if eqarea:
+        # reshape into list
+        start=0
+        bestparamlist = []
+        for m in range(this_map.nlat):
+            bestparamlist.append(bestparams[start:start+this_map.nlon[m]])
+            start = start + this_map.nlon[m]
+        # interp into rectangular array
+        max_length = max([len(x) for x in bestparamlist])
+        stretched_arrays = []
+        for array in bestparamlist:
+            x_old = np.arange(len(array))
+            x_new = np.linspace(0, len(array) - 1, max_length)
+            y_new = np.interp(x_new, x_old, array)
+            stretched_arrays.append(y_new)
+
+        bestparamgrid = np.vstack(stretched_arrays)
+
+        if plot_unstretched_map:
+            # pad into rectangular array
+            padded_arrays = []
+            for array in bestparamlist:
+                left_pad = int((max_length - len(array)) / 2)
+                right_pad = max_length - len(array) - left_pad
+                padded_array = np.pad(array, (left_pad, right_pad), 'constant')
+                padded_arrays.append(padded_array)
+                array_2d = np.vstack(padded_arrays)
+                plt.imshow(array_2d, cmap='plasma')
+                #plt.show()
+
+    else:
+        bestparamgrid = np.reshape(bestparams, (-1, nlon))
+
+    return bestparamgrid
+
+def remove_spike(data, kern_size=10, lim_denom=5):
+    data_pad = np.concatenate([np.ones(kern_size)*np.median(data[:kern_size]), data, np.ones(kern_size)*np.median(data[-kern_size:-1])])
+    data_filt = np.copy(data)
+    for i, val in enumerate(data):
+        i_pad = i + kern_size
+        seg = data_pad[i_pad-kern_size:i_pad+kern_size]
+        seg = seg[np.abs(seg-np.median(seg))<20]
+        lim = np.median(seg)/lim_denom
+        if val > np.median(seg) + lim or val < np.median(seg) - lim:
+            data_filt[i] = np.median(seg[int(kern_size/5):-int(kern_size/5)])
+    return data_filt
+
+def shift_kerns_to_center(modkerns, kerns, goodchips, dv, sim=False):
+    '''shift modkerns to center at dv=0 and shift kerns for same amount.'''
+    nobs, nchip, nk = modkerns.shape
+    cen_modkerns = np.zeros_like(modkerns)
+    cen_kerns = np.zeros_like(kerns)
+    for i,jj in enumerate(goodchips):
+        for k in range(nobs):
+            systematic_rv_offset = (modkerns[k,i]==modkerns[k,i].max()).nonzero()[0][0] - (dv==0).nonzero()[0][0] # find the rv offset
+            print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
+            cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
+            if not sim: # shift kerns with same amount if not simulation
+                cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
+            else: # don't shift if simulation
+                cen_kerns[k,i] = kerns[k,i]
+    return cen_modkerns, cen_kerns
+
+def cont_normalize_kerns(cen_kerns, instru):
+    '''Continuum-normalize kerns by fitting a line at the flat edges of kern.'''
+    nobs, nchip, nk = cen_kerns.shape
+    obskerns = 1. - cen_kerns
+    obskerns_norm = np.zeros_like(obskerns)
+    continuumfit = np.zeros((nobs, nchip, 2))
+    side = 15 if instru != "CRIRES" else 7
+    for i in range(nchip):
+        for n in range(nobs):
+            inds = np.concatenate((np.arange(0, side), np.arange(nk-side, nk)))
+            continuumfit[n,i] = np.polyfit(inds, obskerns[n,i,inds], 1)
+            obskerns_norm[n,i] = obskerns[n,i] / np.polyval(continuumfit[n,i], np.arange(nk))
+    return obskerns_norm
+
+def plot_kerns_timeseries(kerns, goodchips, dv, gap=0.03, normed=False, intrinsic_profiles=None):
+    '''Plot time series of kerns.'''
+    nobs, nchip, nk = kerns.shape
+    colors = [cm.gnuplot_r(x) for x in np.linspace(0, 1, nobs+4)]
+    plt.figure(figsize=(nchip*3,4))
+    for i, jj in enumerate(goodchips):
+        plt.subplot(1, nchip, i+1)
+        for n in range(nobs):
+            if not normed:
+                plt.plot(dv, 1 - kerns[n,i] - gap*n, color=colors[n])
+            else:
+                plt.plot(dv, kerns[n,i] - gap*n, color=colors[n])
+        if intrinsic_profiles is not None:
+            plt.plot(dv, 1-intrinsic_profiles[i], color='k')
+        plt.title(f"chip={jj}")
+        plt.xlabel("dv")
+    plt.tight_layout()
+
+def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, s, savedir, gap=0.02):
+    '''Plot time series of chip-averaged kerns.'''
+    nobs = obskerns_norm.shape[0]
+    colors = [cm.gnuplot_r(x) for x in np.linspace(0, 1, nobs+4)]
+    plt.figure(figsize=(4,4))
+    for n in range(nobs):
+        plt.plot(dv[s:-s], obskerns_norm[n,:,s:-s].mean(axis=0) - gap*n, color=colors[n+1])
+    plt.plot(dv[s:-s], 1-intrinsic_profiles[:,s:-s].mean(axis=0), color='k', label="intrinsic profile")
+    plt.gca().axes.yaxis.set_ticklabels([])
+    plt.gca().axes.yaxis.set_ticks([])
+    plt.xlabel("velocity (km/s)")
+    plt.ylabel("epochs")
+    plt.legend(loc=4, bbox_to_anchor=(1,1))
+    plt.savefig(paths.figures / f"{savedir}/tsplot.pdf", bbox_inches="tight", dpi=300)
+
+def plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir, meanby="median"):
+    '''Plot deviation map for each chip and mean deviation map'''
+    nobs, nchip, nk = obskerns_norm.shape
+    uniform_profiles = np.zeros((nchip, nk))
+
+    plt.figure(figsize=(nchip*4,2.5))
+    for i, jj in enumerate(goodchips):
+        uniform_profiles[i] = obskerns_norm[:,i].mean(axis=0) # is each chip's mean kern over epoches
+        plt.subplot(1,nchip+1,i+1)
+        plt.imshow(obskerns_norm[:,i,s:-s]-uniform_profiles[i,s:-s], 
+            extent=(dv.max()-s, dv.min()+s, period, 0),
+            aspect=int((nk-s)/period*aspect),
+            cmap='YlOrBr') # positive diff means dark spot
+        plt.xlim(dv.min()+s, dv.max()-s),
+        plt.xlabel("velocity (km/s)")
+        plt.ylabel("Elapsed time (h)")
+        plt.colorbar(fraction=0.035)
+        plt.title(f"chip={jj}")
+    if meanby == "median":
+        mean_dev = np.median(np.array([obskerns_norm[:,i]-uniform_profiles[i] for i in range(nchip)]), axis=0) # mean over chips
+    elif meanby == "median_each":
+        mean_dev = np.median(obskerns_norm, axis=1) - np.median(uniform_profiles,axis=0)
+    elif meanby == "mean":
+        mean_dev = np.mean(np.array([obskerns_norm[:,i]-uniform_profiles[i] for i in range(nchip)]), axis=0) # mean over chips
+    plt.subplot(1, nchip+1,i+2)
+    plt.imshow(mean_dev[:,s:-s], 
+        extent=(dv.max()-s, dv.min()+s, period, 0),
+        aspect=int((nk-s)/period*aspect),
+        cmap='YlOrBr') # positive diff means dark spot
+    plt.xlim(dv.min()+s, dv.max()-s),
+    plt.xlabel("velocity (km/s)")
+    plt.ylabel("Elapsed time (h)")
+    plt.colorbar(fraction=0.035)
+    plt.title(f"{meanby} deviation")
+    plt.tight_layout()
+    plt.savefig(paths.figures / f"{savedir}/tvplot_full.pdf", bbox_inches="tight", dpi=300)
+
+    # plot only the mean map
+    plt.figure()
+    plt.imshow(mean_dev[:,s:-s], 
+        extent=(dv.max()-s, dv.min()+s, period, 0),
+        aspect=int((nk-s)/period*aspect),
+        cmap='YlOrBr') # positive diff means dark spot
+    plt.xlim(dv.min()+s, dv.max()-s),
+    plt.xlabel("velocity (km/s)")
+    plt.ylabel("Elapsed time (h)")
+    plt.colorbar(fraction=0.035)
+    plt.title(f"{meanby} deviation")
+    plt.tight_layout()
+    plt.savefig(paths.figures / f"{savedir}/tvplot.pdf", bbox_inches="tight", dpi=300)
+
+def plot_IC14_map(bestparamgrid):
+    '''Plot doppler map from an array.'''
+    nlat, nlon = bestparamgrid.shape 
+    fig = plt.figure(figsize=(7,3))
+    ax = fig.add_subplot(111, projection='mollweide')
+    lon = np.linspace(-np.pi, np.pi, nlon)
+    lat = np.linspace(-np.pi/2., np.pi/2., nlat)
+    Lon,Lat = np.meshgrid(lon,lat)
+    im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading="gouraud")
+    fig.colorbar(im)
+
+
+################################################################################
+####################   Tests    ################################################
+################################################################################
+
+def test_sim():
+    assert simulation_on == True
+    global mean_spectrum, template, observed, residual, error, intrinsic_profiles, obskerns_norm
+    global lin_map
+    mean_spectrum, template, observed, residual, error = load_data(model_datafile)
+    observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, error, residual, plot_ts=True)
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(template, observed)
+    print(use_toy_spec)
+    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, annotate=True)
+    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, avgchip=avgchip, annotate=True)
+    LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, avgchip=avgchip, lr=lr_LSD, niter=niter_LSD, annotate=True)
+
+    #lin_map = solve_starry_lin(mean_spectrum, observed, annotate=True)
+    #opt_map = solve_starry_opt(mean_spectrum, observed, lr=lr, niter=niter, annotate=True)
+
+def test_obs():
+    assert simulation_on == False
+    global mean_spectrum, template, observed, residual, error, intrinsic_profiles, obskerns_norm
+    global bestparamgrid_r, bestparamgrid, LSDlin_map, LSDopt_map, lin_map, opt_map
+
+    mean_spectrum, template, observed, residual, error = load_data(model_datafile)
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(template, observed)
+
+    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, annotate=True)
+
+    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, avgchip=avgchip, annotate=True)
+
+    LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, avgchip=avgchip, lr=lr_LSD, niter=2000, annotate=True)
+
+    lin_map = solve_starry_lin(mean_spectrum, observed, annotate=True)
+    #plt.figure(figsize=(5,3))
+    #plt.savefig(paths.figures / "sim/solver4.pdf", bbox_inches="tight", dpi=300)
+
+    opt_map = solve_starry_opt(mean_spectrum, observed, lr=lr, niter=2000, annotate=True)
+
+    print("Test ok.")
+
+if __name__ == "__main__":
+    pass
+    #test_obs()
