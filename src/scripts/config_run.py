@@ -86,14 +86,14 @@ LSD = "new"
 
 ########## IC14 parameters ##########
 if instru == "CRIRES":
-    nk, s, aspect = 203, 60, 1
+    nk = 203
 elif instru == "IGRINS":
-    nk, s, aspect = 103, 20, 1.5
+    nk = 103
 LLD = 1.0
 alpha = 4500
 ftol = 0.01 # tolerance for convergence of maximum-entropy
 nstep = 2000
-nlat, nlon = 20, 40
+nlat, nlon = 10, 20
 
 ########## Starry parameters ##########
 ydeg_sim = 15

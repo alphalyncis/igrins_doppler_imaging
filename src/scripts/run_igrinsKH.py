@@ -6,18 +6,14 @@ import paths
 ####################    Configs     ##########################################
 ##############################################################################
 
-config = True
-if config:
-
-    ##############################################################################
-    ####################    Constants   ##########################################
-    ##############################################################################
+if True:
+    ####################   Constants    ##########################################
 
     goodchips_run = {
-        "IGRINS": {
+        "IGRINS":{
             "W1049B":{
-                "K": [1, 4, 13], #[0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 17, 18], #
-                "H": [2,3,4]#[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
+                "K": [1, 4, 13], #[0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 18], 
+                "H": [1,2,3,4] #[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
             },
             "W1049A":{
                 "K": [0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 17, 18], 
@@ -26,14 +22,6 @@ if config:
             "2M0036":{
                 "K": [2,3,4,5,8,10,11,12,13,14,15,18], 
                 "H": [1,2,3,4,5,9,10,11,16], #[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
-            }
-        }, # [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],
-        "CRIRES": {
-            "W1049B":{
-                "K": [0, 1, 2, 3]
-            },
-            "W1049A":{
-                "K": [0, 1, 2, 3]
             }
         }
     }
@@ -64,7 +52,7 @@ if config:
     ##############################################################################
 
     simulation_on = False
-    savedir = "igrinsH"
+    savedir = "igrinsHK"
     use_toy_spec = False
 
     #################### Run settings ####################################
@@ -72,7 +60,7 @@ if config:
     flux_err = 0.01 if use_toy_spec else 0.025
     instru = "IGRINS"
     target = "W1049B"
-    band = "H"
+    band = "both"
     #solver = "IC14new"
     map_type = "eqarea"
     nobs = 14 if "W1049" in target else 7
@@ -81,12 +69,12 @@ if config:
     LSD = "new"
 
     ########## IC14 parameters ##########
-    nk = 103 if instru != "CRIRES" else 203
+    nk = 103
     LLD = 1.0
     alpha = 4500
     ftol = 0.01 # tolerance for convergence of maximum-entropy
     nstep = 2000
-    nlat, nlon = 20, 40
+    nlat, nlon = 10, 20
 
     ########## Starry parameters ##########
     ydeg_sim = 15
@@ -111,19 +99,20 @@ if config:
         use_eqarea = True
 
     # set chips to include
-    goodchips = goodchips_run[instru][target][band]
-    nchip = len(goodchips)
+    goodchipsK = goodchips_run[instru][target]["K"]
+    goodchipsH = goodchips_run[instru][target]["H"]
 
     # set model files to use
     if "t1" in modelspec:
-        model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
+        model_datafileK = paths.data / f'{instru}_{target}_K_{modelspec}.pickle'
+        model_datafileH = paths.data / f'{instru}_{target}_H_{modelspec}.pickle'
         pmod = f'linbroad_{modelspec}'
         rv = rvs[target]
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
 
-    print(f"Using real observation {model_datafile}")
+    print(f"Using real observation {model_datafileK}")
 
     # set solver parameters
     period = periods[target]
@@ -149,7 +138,7 @@ if config:
 
     kwargs_run = kwargs_sim.copy()
     kwargs_run['ydeg'] = ydeg
-    
+
     kwargs_IC14 = dict(
         phases=phases, 
         inc=inc, 
@@ -162,34 +151,60 @@ if config:
         ftol=ftol
     )
 
-    kwargs_fig = dict(
-        goodchips=goodchips,
-        noisetype=noisetype,
-        contrast=contrast,
-        savedir=savedir
-    )
-
+nk = 71
 ##############################################################################
 ####################      Run!      ##########################################
 ##############################################################################
 
 assert simulation_on == False
-assert savedir == "igrinsH"
+assert savedir == "igrinsHK"
 
 # Load data from pickle fit
-mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
+wav=[]
+wav0=[]
+print("K band:")
+mean_spectrumK, templateK, observedK, residualK, errorK, wav_nmK, wav0_nmK = load_data(model_datafileK, instru, nobs, goodchipsK)
+#print("mean_spetrumK:", mean_spectrumK.shape)
+#print("observedK:", observedK.shape)
+
+print("\nH band:")
+mean_spectrumH, templateH, observedH, residualH, errorH, wav_nmH, wav0_nmH = load_data(model_datafileH, instru, nobs, goodchipsH)
+#print("mean_spetrumH:", mean_spectrumH.shape)
+#print("observedH:", observedH.shape)
+
+wav_nm = np.concatenate((wav_nmH, wav_nmK), axis=0)
+wav0_nm = np.concatenate((wav0_nmH, wav0_nmK), axis=0)
+mean_spectrum = np.concatenate((mean_spectrumH, mean_spectrumK), axis=0)
+template = np.concatenate((templateH, templateK), axis=1)
+observed = np.concatenate((observedH, observedK), axis=1)
+residual = np.concatenate((residualH, residualK), axis=1)
+error = np.concatenate((errorH, errorK), axis=1)
+goodchips = goodchipsH + goodchipsK
+
+print("\nAfter stacking:")
+print("mean_spetrum:", mean_spectrum.shape)
+print("observed:", observed.shape)
+print("wav:", wav_nm.shape)
+print("goodchips:", goodchips)
+
+kwargs_fig = dict(
+    goodchips=goodchips,
+    noisetype=noisetype,
+    contrast=contrast,
+    savedir=savedir
+)
 
 # Compute LSD mean profile
-#intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, rv, period, savedir)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir)
 
 # Solve by 5 solvers
-#bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=True)
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=True)
 
-#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
+LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
 
-#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=True)
+LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=True)
 
-#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm kwargs_run, kwargs_fig, annotate=True)
+lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 

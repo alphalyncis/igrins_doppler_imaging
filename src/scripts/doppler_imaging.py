@@ -31,7 +31,7 @@ import dime3 as dime # Doppler Imaging & Maximum Entropy, needed for various fun
 ################################################################################
 
 def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
-    global wav_nm, wav0_nm, npix, npix0, flux_err
+    global npix, npix0, flux_err
     # Load model and data
     with open(model_datafile, "rb") as f:
         data = pickle.load(f, encoding="latin1")
@@ -117,7 +117,7 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
     print("observed:", observed.shape)
     print(f"wav: {wav_nm.shape}, wav0: {wav0_nm.shape}")
 
-    return mean_spectrum, template, observed, residual, error
+    return mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm
 
 def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, 
                      error, residual, noisetype, kwargs_sim, savedir, pad=100, plot_ts=False):
@@ -199,9 +199,10 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     return observed
 
-def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir, pad=100):
+def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir, pad=100):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
+    print("wav:", wav_nm.shape)
     nobs = observed.shape[0]
     nchip = len(goodchips)
     # Read daospec linelist
@@ -296,14 +297,17 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
     # TODO: derotate map??? seems like Ic14 maps are flipped and rolled 180 deg
 
     plot_IC14_map(bestparamgrid) # derotated
+
+    map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
         plt.text(-2,-1.3, 
-        f"""chip=averaged{kwargs_fig['goodchips']} 
-            solver=IC14new{kwargs_IC14['eqarea']} 
-            noise={kwargs_fig['noisetype']} 
-            err_level={flux_err} 
-            contrast={kwargs_fig['contrast']} 
-            limbdark={kwargs_IC14['LLD']}""",
+        f"""
+        chip=averaged{kwargs_fig['goodchips']} 
+        solver=IC14new {map_type} 
+        noise={kwargs_fig['noisetype']} 
+        err_level={flux_err} 
+        contrast={kwargs_fig['contrast']} 
+        limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.pdf", bbox_inches="tight", dpi=300)
 
@@ -444,7 +448,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     
     return map_res
 
-def solve_starry_lin(mean_spectrum, observed, kwargs_run, kwargs_fig, annotate=False):
+def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False):
     print("*** Using solver starry_lin***")
     goodchips = kwargs_fig['goodchips']
     nchip = len(goodchips)
@@ -501,7 +505,7 @@ def solve_starry_lin(mean_spectrum, observed, kwargs_run, kwargs_fig, annotate=F
 
     return maps
 
-def solve_starry_opt(mean_spectrum, observed, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
+def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
     print("*** Using solver starry_opt ***")
     goodchips = kwargs_fig['goodchips']
     nchip = len(goodchips)
@@ -525,7 +529,7 @@ def solve_starry_opt(mean_spectrum, observed, kwargs_run, kwargs_fig, lr=0.05, n
 
             # Likelihood term
             pm.Normal(
-                f"obs{jj}",
+                f"obs{i}",
                 mu=tt.reshape(flux_models[i], (-1,)),
                 sd=flux_err,
                 observed=observed[:,i,:].reshape(-1,))
