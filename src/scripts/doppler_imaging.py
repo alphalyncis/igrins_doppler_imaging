@@ -26,8 +26,6 @@ import dime3 as dime # Doppler Imaging & Maximum Entropy, needed for various fun
 #TODO: test more parameters for starry solver
 #TODO: test sampling rate
 
-#global nobs, nchip, instru, goodchips, use_toy_spec, u1, theta, kwargs_sim, add_noise_when, noisetype, savedir, line_file, cont_file, factor, nk, rv, pmod, period
-#global phases, inc, vsini, LLD, nlat, nlon, use_eqarea, map_type, contrast, ydeg, udeg, kwargs_run
 ################################################################################
 ####################   Methods for workflow    #################################
 ################################################################################
@@ -122,7 +120,8 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
     return mean_spectrum, template, observed, residual, error
 
 def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, 
-                     error, residual, noisetype, kwargs_sim, savedir, plot_ts=False):
+                     error, residual, noisetype, kwargs_sim, savedir, pad=100, plot_ts=False):
+    nobs = error.shape[0]
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = 1 - contrast
@@ -174,11 +173,11 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
         flux_err_add = 0.02
         noise = {
-            "none": np.zeros(npix0),
-            "random": np.random.normal(np.zeros(npix0), flux_err),
-            "obserr": np.mean(error[:, i], axis=0),
-            "residual": np.mean(residual[:, i], axis=0),
-            "res+random": np.mean(residual[:, i], axis=0) + np.random.normal(np.zeros(npix0), flux_err_add)
+            "none": np.zeros((nobs, npix)),
+            "random": np.random.normal(np.zeros((nobs, npix)), flux_err),
+            "obserr": error[:, i, pad:-pad],
+            "residual": residual[:, i, pad:-pad],
+            "res+random": residual[:, i, pad:-pad] + np.random.normal(np.zeros((nobs, npix)), flux_err_add)
         }
 
         sim_map.spectrum = mean_spectrum[i]
@@ -194,13 +193,13 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
     plt.savefig(paths.figures / f"{savedir}/fakemap.pdf", bbox_inches="tight", dpi=300)
 
     if plot_ts:
-        plot_timeseries(sim_map, model_flux, obsflux=simulated_flux, overlap=2)
+        plot_timeseries(sim_map, model_flux, kwargs_sim["theta"], obsflux=simulated_flux, overlap=2)
 
     observed = np.transpose(allchips_flux, axes=(1,0,2))
 
     return observed
 
-def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, rv, period, savedir, pad=100):
+def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir, pad=100):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
     nobs = observed.shape[0]
@@ -222,6 +221,7 @@ def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, con
 
     # Compute LSD velocity grid:
     dbeta = np.diff(wav_angs).mean()/wav_angs.mean()
+    print("dbeta", dbeta)
     dx = - dbeta * np.arange(np.floor(-nk/2.+.5), np.floor(nk/2.+.5))
     dv = const.c*dx / 1e3 # km/s
 
@@ -253,16 +253,12 @@ def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, con
     #plt.show()
     plt.savefig(paths.output / "LSD_deltaspecs.pdf")
     
-    # plot kerns before shift fix
+    # shift kerns to center
+    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
+
+    # plot kerns
     plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
     plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
-
-    # shift kerns to center
-    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, nobs, nk, dv, sim=simulation_on)
-    
-    # Plot kerns after shift fix
-    #plot_kern_timeseries(kerns, goodchips, nobs, nchip, dv, gap=0.02)
-    #plot_kern_timeseries(modkerns, goodchips, nobs, nchip, dv, gap=0.1)
 
     err_LSD_profiles = np.median(kerns.mean(1).std(0)) 
     # the error level across different obs of the chip-avged profile, median over nk pixels
@@ -275,12 +271,10 @@ def make_LSD_profile(instru, template, observed, goodchips, pmod, line_file, con
     plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.03, normed=True, intrinsic_profiles=intrinsic_profiles)
     
     ### Plot averaged line shapes
-    s = 20 if instru != "CRIRES" else 60
-    aspect = 1.5 if instru != "CRIRES" else 1
-    plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, s, savedir, gap=0.02)
+    plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, savedir, gap=0.02)
 
     ### Plot deviation map for each chip and mean deviation map
-    plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir, meanby="median")
+    plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median")
 
     return intrinsic_profiles, obskerns_norm
 
@@ -301,18 +295,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
         np.flip(bestparamgrid, axis=1), int(0.5*bestparamgrid.shape[1]), axis=1)
     # TODO: derotate map??? seems like Ic14 maps are flipped and rolled 180 deg
 
-    plot_IC14_map(bestparamgrid)
-    if annotate:
-        plt.text(-2,-1.3, 
-        f"""chip=averaged{kwargs_fig['goodchips']} 
-            solver=IC14new{kwargs_IC14['eqarea']} 
-            noise={kwargs_fig['noisetype']} 
-            err_level={flux_err} 
-            contrast={kwargs_fig['contrast']} 
-            limbdark={kwargs_IC14['LLD']}""",
-        fontsize=8)
-
-    plot_IC14_map(bestparamgrid_r) # derotated
+    plot_IC14_map(bestparamgrid) # derotated
     if annotate:
         plt.text(-2,-1.3, 
         f"""chip=averaged{kwargs_fig['goodchips']} 
@@ -915,7 +898,7 @@ def dsa(r, i, Nk, **kw): #, w=None, verbose=False, noback=False):
     else:
         return (m, K, B0, chisq)
 
-def plot_timeseries(map, modelspec, obsflux=None, overlap=8.0, figsize=(5, 11.5)):
+def plot_timeseries(map, modelspec, theta, obsflux=None, overlap=8.0, figsize=(5, 11.5)):
     # Plot the "Joy Division" graph
     fig = plt.figure(figsize=figsize)
     ax_img = [
@@ -1037,7 +1020,7 @@ def solve_DIME(
     # initialize Doppler map object
     inc_ = (90 - inc) * np.pi / 180 # IC14 defined 0 <-> equator-on, pi/2 <-> face-on
     if eqarea:
-        mmap = ELL_map.map(nlat=nlat, nlon=nlon, type='eqarea', inc=inc_)
+        mmap = ELL_map.map(nlat=nlat, nlon=nlon, type='eqarea', inc=inc_, verbose=True)
     else:
         mmap = ELL_map.map(nlat=nlat, nlon=nlon, inc=inc_) #ELL_map.map returns a class object
     if plot_cells:
@@ -1185,14 +1168,14 @@ def plot_kerns_timeseries(kerns, goodchips, dv, gap=0.03, normed=False, intrinsi
         plt.xlabel("dv")
     plt.tight_layout()
 
-def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, s, savedir, gap=0.02):
+def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, savedir, gap=0.02):
     '''Plot time series of chip-averaged kerns.'''
     nobs = obskerns_norm.shape[0]
     colors = [cm.gnuplot_r(x) for x in np.linspace(0, 1, nobs+4)]
     plt.figure(figsize=(4,4))
     for n in range(nobs):
-        plt.plot(dv[s:-s], obskerns_norm[n,:,s:-s].mean(axis=0) - gap*n, color=colors[n+1])
-    plt.plot(dv[s:-s], 1-intrinsic_profiles[:,s:-s].mean(axis=0), color='k', label="intrinsic profile")
+        plt.plot(dv, obskerns_norm[n].mean(axis=0) - gap*n, color=colors[n+1])
+    plt.plot(dv, 1-intrinsic_profiles.mean(axis=0), color='k', label="intrinsic profile")
     plt.gca().axes.yaxis.set_ticklabels([])
     plt.gca().axes.yaxis.set_ticks([])
     plt.xlabel("velocity (km/s)")
@@ -1200,7 +1183,7 @@ def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, s, savedi
     plt.legend(loc=4, bbox_to_anchor=(1,1))
     plt.savefig(paths.figures / f"{savedir}/tsplot.pdf", bbox_inches="tight", dpi=300)
 
-def plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir, meanby="median"):
+def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median"):
     '''Plot deviation map for each chip and mean deviation map'''
     nobs, nchip, nk = obskerns_norm.shape
     uniform_profiles = np.zeros((nchip, nk))
@@ -1209,11 +1192,11 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir,
     for i, jj in enumerate(goodchips):
         uniform_profiles[i] = obskerns_norm[:,i].mean(axis=0) # is each chip's mean kern over epoches
         plt.subplot(1,nchip+1,i+1)
-        plt.imshow(obskerns_norm[:,i,s:-s]-uniform_profiles[i,s:-s], 
-            extent=(dv.max()-s, dv.min()+s, period, 0),
-            aspect=int((nk-s)/period*aspect),
+        plt.imshow(obskerns_norm[:,i]-uniform_profiles[i], 
+            extent=(dv.max(), dv.min(), period, 0),
+            aspect=int(vsini/1e3),
             cmap='YlOrBr') # positive diff means dark spot
-        plt.xlim(dv.min()+s, dv.max()-s),
+        plt.xlim(dv.min(), dv.max()),
         plt.xlabel("velocity (km/s)")
         plt.ylabel("Elapsed time (h)")
         plt.colorbar(fraction=0.035)
@@ -1225,11 +1208,11 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir,
     elif meanby == "mean":
         mean_dev = np.mean(np.array([obskerns_norm[:,i]-uniform_profiles[i] for i in range(nchip)]), axis=0) # mean over chips
     plt.subplot(1, nchip+1,i+2)
-    plt.imshow(mean_dev[:,s:-s], 
-        extent=(dv.max()-s, dv.min()+s, period, 0),
-        aspect=int((nk-s)/period*aspect),
+    plt.imshow(mean_dev, 
+        extent=(dv.max(), dv.min(), period, 0),
+        aspect=int(vsini/1e3),
         cmap='YlOrBr') # positive diff means dark spot
-    plt.xlim(dv.min()+s, dv.max()-s),
+    plt.xlim(dv.min(), dv.max()),
     plt.xlabel("velocity (km/s)")
     plt.ylabel("Elapsed time (h)")
     plt.colorbar(fraction=0.035)
@@ -1239,11 +1222,11 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, s, period, aspect, savedir,
 
     # plot only the mean map
     plt.figure()
-    plt.imshow(mean_dev[:,s:-s], 
-        extent=(dv.max()-s, dv.min()+s, period, 0),
-        aspect=int((nk-s)/period*aspect),
+    plt.imshow(mean_dev, 
+        extent=(dv.max(), dv.min(), period, 0),
+        aspect=int(0.7* vsini/1e3),
         cmap='YlOrBr') # positive diff means dark spot
-    plt.xlim(dv.min()+s, dv.max()-s),
+    plt.xlim(dv.min(), dv.max()),
     plt.xlabel("velocity (km/s)")
     plt.ylabel("Elapsed time (h)")
     plt.colorbar(fraction=0.035)

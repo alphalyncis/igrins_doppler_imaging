@@ -20,7 +20,7 @@ OPTIONS = {
 goodchips_run = {
     "IGRINS": {
         "W1049B":{
-            "K": [1, 4, 13], #[0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 17, 18], #
+            "K": [0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 18], #[1, 4, 13], #
             "H": [2,3,4]#[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
         },
         "W1049A":{
@@ -85,7 +85,10 @@ modelspec = "t1500g1000f8"
 LSD = "new"
 
 ########## IC14 parameters ##########
-nk = 103 if instru != "CRIRES" else 203
+if instru == "CRIRES":
+    nk, s, aspect = 203, 60, 1
+elif instru == "IGRINS":
+    nk, s, aspect = 103, 20, 1.5
 LLD = 1.0
 alpha = 4500
 ftol = 0.01 # tolerance for convergence of maximum-entropy
@@ -108,67 +111,68 @@ niter = 5000
 
 #################### Automatic ####################################
 
-# Auto consistent options
-contrast = "real"
-noisetype = "real"
-if map_type == "eqarea":
-    use_eqarea = True
+if True:
+    # Auto consistent options
+    contrast = "real"
+    noisetype = "real"
+    if map_type == "eqarea":
+        use_eqarea = True
 
-# set chips to include
-goodchips = goodchips_run[instru][target][band]
-nchip = len(goodchips)
+    # set chips to include
+    goodchips = goodchips_run[instru][target][band]
+    nchip = len(goodchips)
 
-# set model files to use
-if "t1" in modelspec:
-    model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
-    pmod = f'linbroad_{modelspec}'
-    rv = rvs[target]
+    # set model files to use
+    if "t1" in modelspec:
+        model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
+        pmod = f'linbroad_{modelspec}'
+        rv = rvs[target]
 
-line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
-cont_file = paths.data / f'linelists/{pmod}C.fits'
+    line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
+    cont_file = paths.data / f'linelists/{pmod}C.fits'
 
-print(f"Using real observation {model_datafile}")
+    print(f"Using real observation {model_datafile}")
 
-# set solver parameters
-period = periods[target]
-inc = incs[target]
-vsini = vsinis[target]
-veq = vsini / np.sin(inc * np.pi / 180)
+    # set solver parameters
+    period = periods[target]
+    inc = incs[target]
+    vsini = vsinis[target]
+    veq = vsini / np.sin(inc * np.pi / 180)
 
-# set time and period parameters
-timestamp = timestamps[target]
-phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
-theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
+    # set time and period parameters
+    timestamp = timestamps[target]
+    phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
+    theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
 
-kwargs_sim = dict(
-    ydeg=ydeg_sim,
-    udeg=udeg,
-    nc=nc,
-    veq=veq,
-    inc=inc,
-    nt=nobs,
-    vsini_max=vsini_max,
-    u1=u1,
-    theta=theta)
+    kwargs_sim = dict(
+        ydeg=ydeg_sim,
+        udeg=udeg,
+        nc=nc,
+        veq=veq,
+        inc=inc,
+        nt=nobs,
+        vsini_max=vsini_max,
+        u1=u1,
+        theta=theta)
 
-kwargs_run = kwargs_sim.copy()
-kwargs_run['ydeg'] = ydeg
+    kwargs_run = kwargs_sim.copy()
+    kwargs_run['ydeg'] = ydeg
 
-kwargs_IC14 = dict(
-    phases=phases, 
-    inc=inc, 
-    vsini=vsini, 
-    LLD=LLD, 
-    eqarea=use_eqarea, 
-    nlat=nlat, 
-    nlon=nlon,
-    alpha=alpha,
-    ftol=ftol
-)
+    kwargs_IC14 = dict(
+        phases=phases, 
+        inc=inc, 
+        vsini=vsini, 
+        LLD=LLD, 
+        eqarea=use_eqarea, 
+        nlat=nlat, 
+        nlon=nlon,
+        alpha=alpha,
+        ftol=ftol
+    )
 
-kwargs_fig = dict(
-    goodchips=goodchips,
-    noisetype=noisetype,
-    contrast=contrast,
-    savedir=savedir
-)
+    kwargs_fig = dict(
+        goodchips=goodchips,
+        noisetype=noisetype,
+        contrast=contrast,
+        savedir=savedir
+    )
