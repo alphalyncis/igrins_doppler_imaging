@@ -54,7 +54,7 @@ def make_latlon_grid(nphi, ntheta):
 
     return phi, theta
 
-def make_eqarea_grid(ncell):
+def make_eqarea_grid(ncell, verbose=False):
     """Make grids of phi and theta values with the specified number of
     cells of roughly equal area. Phi ranges from 0 to 2pi, and theta
     ranges from -pi/2 (in fact 0) to pi/2 (in fact pi).
@@ -90,12 +90,10 @@ def make_eqarea_grid(ncell):
     for m in range(nlat):
         phi[m] = np.array([widths[m]/2 + n * widths[m] for n in range(ncells_per_row[m])])
     
-    print(f"Created equa-area grid of {ncell_true} cells, in {len(theta)} latitude grids with {ncells_per_row} lontitude cells.")
+    if verbose:
+        print(f"Created equa-area grid of {ncell_true} cells, in {len(theta)} latitude grids with {ncells_per_row} lontitude cells.")
 
     return phi, theta, height, widths, ncell_true
-
-def plot_eqarea_map():
-    pass
 
 def rotcoord(phi,theta,iangle,rangle):
     """rotate coordinate system from local (planetary) coordinates into
@@ -450,7 +448,7 @@ class mapcell:
             if not (np.isfinite(visible_corners)).all():
                 self.visible_corners = self.corners * np.nan
                 area = 0
-                print("Non-finite projected corners; need to fix this.") # EB updated print statement
+                #print("Non-finite projected corners; need to fix this.") # EB updated print statement
             else:
                 self.visible_corners = visible_corners
 
@@ -503,13 +501,13 @@ class map:
     # 2013-08-07 11:05 IJMC: Added mu field for maps and cells
     # 2014-08-07 15:00 IJMC: Updated documentation -- exactly 1 year later!
 
-    def __init__(self, nlon=20, nlat=10, type='latlon', deltaphi=0, inc=0):
+    def __init__(self, nlon=20, nlat=10, type='latlon', deltaphi=0, inc=0, verbose=False):
         self.type = type
         self.nlon = nlon
         self.nlat = nlat
         self.ncell = nlon*nlat
         if self.type == "eqarea":
-            phi, theta, height, widths, ncell_true = make_eqarea_grid(self.ncell)
+            phi, theta, height, widths, ncell_true = make_eqarea_grid(self.ncell, verbose=verbose)
             self.ncell = ncell_true
         self.deltaphi = deltaphi
         self.inc = inc
