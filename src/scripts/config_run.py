@@ -9,10 +9,10 @@ OPTIONS = {
     "modelmap": ["1spot", "1band", "2band", "blank"],
     "noisetype": ["residual", "random", "obserr", "none", "res+random"],
     "instru": ["IGRINS", "CRIRES"],
-    "target": ["W1049A", "W1049B", "2M0036"],
+    "target": ["W1049A", "W1049B", "2M0036_1103", "2M0036_1105"],
     "band": ["K", "H", "both"],
     "solver": ["starry_lin", "starry_opt", "IC14new", "IC14orig"],
-    "map_type": ["eqarea", "rect"],
+    "map_type": ["eqarea", "latlon"],
     "modelspec": ["lte015.0-5.0", "t1500g1000f8"],
     "LSD": ["new", "orig", None]
 }
@@ -20,17 +20,21 @@ OPTIONS = {
 goodchips_run = {
     "IGRINS": {
         "W1049B":{
-            "K": [0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 18], #[1, 4, 13], #
-            "H": [2,3,4]#[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
+            "K": [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18], #[1, 4, 13], #
+            "H": [1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19] #[2,3,4]#
         },
         "W1049A":{
             "K": [0, 1, 2, 3, 4, 5, 13, 14, 15, 16, 17, 18], 
             "H": [0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
         },
-        "2M0036":{
-            "K": [2,3,4,5,8,10,11,12,13,14,15,18], 
-            "H": [1,2,3,4,5,9,10,11,16], #[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
-        }
+        "2M0036_1103":{
+            "K": [2,4,5,6,12,13,14,15,16,18,19], # [2,3,4,5,8,10,11,12,13,14,15,18], 
+            "H": [1,2,3,4,5,6,7,8,9,10,11,13,16,18] #[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
+        },
+        "2M0036_1105":{
+            "K": [2,4,5,6,11,12,13,16,18], #[2,3,4,5,8,10,11,12,13,14,15,18], 
+            "H": [1,2,3,4,5,7,8,12,16] #[1,2,3,4,5,9,10,11,16], #[0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19]
+        },      
     }, # [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],
     "CRIRES": {
         "W1049B":{
@@ -42,10 +46,12 @@ goodchips_run = {
     }
 }
 
-periods = {"W1049B": 5.28,   "W1049A": 7,      "2M0036": 2.7 }
-incs =    {"W1049B": 80,     "W1049A": 70,     "2M0036": 51  }
-vsinis =  {"W1049B": 29e3,   "W1049A": 21e3,   "2M0036": 32e3}
-rvs =     {"W1049B": 7.4e-5, "W1049A": 9.3e-5, "2M0036": 6e-5}
+nobss =   {"W1049B": 14,     "W1049A": 14,     "2M0036_1103": 7   ,  "2M0036_1105": 8}
+
+periods = {"W1049B": 5.28,   "W1049A": 7,      "2M0036_1103": 2.7 ,  "2M0036_1105": 2.7}
+incs =    {"W1049B": 80,     "W1049A": 70,     "2M0036_1103": 51  ,  "2M0036_1105": 51}
+vsinis =  {"W1049B": 29e3,   "W1049A": 21e3,   "2M0036_1103": 36e3,  "2M0036_1105": 36e3}
+rvs =     {"W1049B": 7.4e-5, "W1049A": 9.3e-5, "2M0036_1103": 6.5e-5,  "2M0036_1105": 6.5e-5}
                 #9e-5 9.3e-5if CRIRES 7.4e-5 5.4e-5 if IGRINS
 
 timestamps = { # obs times in hour, computed from obs headers (JD-DATE)
@@ -57,9 +63,12 @@ timestamps = { # obs times in hour, computed from obs headers (JD-DATE)
         [0.134892  , 0.49418401, 0.85395001, 1.213902  , 1.5732    ,
         1.93294201, 2.30937601, 2.66913001, 3.19404001, 3.61374   ,
         3.987222  , 4.35165001, 4.71316801, 5.07270601]),
-    "2M0036": np.array(
+    "2M0036_1103": np.array(
         [0.        , 0.35493599, 0.709224  , 1.063536  , 2.07012   ,
-        2.424528  , 2.779728  ])
+        2.424528  , 2.779728  ]),
+    "2M0036_1105": np.array(
+        [0.        , 0.35536801, 0.727008  , 1.08223201, 1.43724001,
+       1.79220001, 2.14716   , 2.50233601]),
 }
 
 
@@ -79,7 +88,6 @@ target = "W1049B"
 band = "H"
 #solver = "IC14new"
 map_type = "eqarea"
-nobs = 14 if "W1049" in target else 7
 
 modelspec = "t1500g1000f8"
 LSD = "new"
@@ -118,6 +126,8 @@ if True:
     if map_type == "eqarea":
         use_eqarea = True
 
+    nobs = nobss[target]
+
     # set chips to include
     goodchips = goodchips_run[instru][target][band]
     nchip = len(goodchips)
@@ -130,8 +140,6 @@ if True:
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
-
-    print(f"Using real observation {model_datafile}")
 
     # set solver parameters
     period = periods[target]

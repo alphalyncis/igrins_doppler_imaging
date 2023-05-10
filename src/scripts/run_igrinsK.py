@@ -12,7 +12,7 @@ savedir = "igrinsK"
 band = "K"
 nk = 101
 nlat, nlon = 10, 20
-goodchips = [0, 1, 2, 3, 4, 5, 13, 15, 16, 18]
+goodchips_run[instru][target][band] = [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
 
 #################### Automatic ####################################
 
@@ -22,6 +22,8 @@ if True:
     noisetype = "real"
     if map_type == "eqarea":
         use_eqarea = True
+
+    nobs = nobss[target]
 
     # set chips to include
     goodchips = goodchips_run[instru][target][band]
@@ -35,8 +37,6 @@ if True:
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
-
-    print(f"Using real observation {model_datafile}")
 
     # set solver parameters
     period = periods[target]
@@ -82,13 +82,13 @@ if True:
         savedir=savedir
     )
 
-
 ##############################################################################
 ####################      Run!      ##########################################
 ##############################################################################
 
 assert simulation_on == False
 assert savedir == "igrinsK"
+print(f"Using real observation {model_datafile}")
 
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
@@ -101,13 +101,13 @@ bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm
 
 LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
 
-LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=True)
+LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=True)
 
-lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
+#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=2000, annotate=True)
+#opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=2000, annotate=True)
 
 print("Run success.")
 

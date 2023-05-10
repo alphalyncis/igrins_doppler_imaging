@@ -119,7 +119,7 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
 
     return mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm
 
-def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, 
+def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, wav_nm, wav0_nm,
                      error, residual, noisetype, kwargs_sim, savedir, pad=100, plot_ts=False):
     nobs = error.shape[0]
     # create fakemap
@@ -202,7 +202,6 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir, pad=100):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
-    print("wav:", wav_nm.shape)
     nobs = observed.shape[0]
     nchip = len(goodchips)
     # Read daospec linelist
@@ -296,18 +295,17 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
         np.flip(bestparamgrid, axis=1), int(0.5*bestparamgrid.shape[1]), axis=1)
     # TODO: derotate map??? seems like Ic14 maps are flipped and rolled 180 deg
 
-    plot_IC14_map(bestparamgrid) # derotated
+    plot_IC14_map(bestparamgrid_r) # derotated
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
-        plt.text(-2,-1.3, 
-        f"""
-        chip=averaged{kwargs_fig['goodchips']} 
-        solver=IC14new {map_type} 
-        noise={kwargs_fig['noisetype']} 
-        err_level={flux_err} 
-        contrast={kwargs_fig['contrast']} 
-        limbdark={kwargs_IC14['LLD']}""",
+        plt.text(-3.5, -1, f"""
+            chip=averaged{kwargs_fig['goodchips']} 
+            solver=IC14new {map_type} 
+            noise={kwargs_fig['noisetype']} 
+            err_level={flux_err} 
+            contrast={kwargs_fig['contrast']} 
+            limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.pdf", bbox_inches="tight", dpi=300)
 
@@ -348,14 +346,14 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     fig, ax = plt.subplots()
     map_av.show(ax=ax, projection="moll", image=image, colorbar=True)
     if annotate:
-        ax.annotate(
-        f"""chip={kwargs_fig['goodchips']}
+        ax.annotate(f"""
+            chip={kwargs_fig['goodchips']}
             solver=LSD+starry_lin
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['noisetype']} 
             limbdark={kwargs_run['u1']}""",
-        xy=(-1.6, -1))
+        xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.pdf", bbox_inches="tight", dpi=300)
 
     return map_av
@@ -436,14 +434,14 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     fig, ax = plt.subplots()
     map_res.show(ax=ax, projection="moll", colorbar=True, cmap="plasma")
     if annotate:
-        ax.annotate(
-        f"""chip={kwargs_fig['goodchips']}
+        ax.annotate(f"""
+            chip={kwargs_fig['goodchips']}
             solver=LSD+starry_opt(lr={lr}) 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
-        xy=(-1.6, -1))
+        xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.pdf", bbox_inches="tight", dpi=300)
     
     return map_res
@@ -455,6 +453,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     maps = [None for i in range(nchip)]
     images = []
+    successchips = []
     for i, jj in enumerate(goodchips):
         maps[i] = starry.DopplerMap(lazy=False, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
         maps[i].spectrum = mean_spectrum[i]
@@ -472,6 +471,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
             )
             imag = maps[i].render(projection="moll")
             images.append(imag)
+            successchips.append(jj)
 
             print("Success!")
         
@@ -481,10 +481,10 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     # plot map of each chip
     if nchip > 1:
-        fig, axs = plt.subplots(nchip, 1)
-        for i, map in enumerate(maps):
-            imag = map.render(projection="moll")
-            map.show(ax=axs[i], projection="moll", image=imag, colorbar=True)
+        fig, axs = plt.subplots(len(successchips), 1)
+        for i, jj in enumerate(successchips):
+            maps[0].show(ax=axs[i], projection="moll", image=images[i], colorbar=False)
+            axs[i].annotate(f"chip {jj}", xy=(-1.6, -1))
         plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.pdf", bbox_inches="tight", dpi=300)
 
     # plot chip-averaged map
@@ -493,14 +493,14 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
     fig, ax = plt.subplots()
     maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=True)
     if annotate:
-        ax.annotate(
-        f"""chip=median{goodchips} 
+        ax.annotate(f"""
+            chip=median{goodchips} 
             solver=starry_lin 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
-        xy=(-1.6, -1))
+        xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.pdf", bbox_inches="tight", dpi=300)
 
     return maps
@@ -571,14 +571,14 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
     fig, ax = plt.subplots()
     map_res.show(ax=ax, projection="moll", colorbar=True)
     if annotate:
-        ax.annotate(
-        f"""chip={goodchips}
+        ax.annotate(f"""
+            chip={goodchips}
             solver=starry_opt(lr={lr}) 
             noise={kwargs_fig['noisetype']} 
             err_level={flux_err} 
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
-        xy=(-1.6, -1))
+        xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.pdf", bbox_inches="tight", dpi=300)
 
     return map_res
@@ -1235,6 +1235,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, mea
     plt.ylabel("Elapsed time (h)")
     plt.colorbar(fraction=0.035)
     plt.title(f"{meanby} deviation")
+    plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.pdf", bbox_inches="tight", dpi=300)
 
