@@ -162,6 +162,10 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
     elif modelmap == "blank":
         fakemap = np.ones((n_lat, n_lon))
 
+    elif modelmap == "gcm":
+        fakemap = np.loadtxt(paths.data / 'modelmaps/gcm.txt')
+        n_lat, n_lon = fakemap.shape
+
     fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
 
     # Compute simulated flux
