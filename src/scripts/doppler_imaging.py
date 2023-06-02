@@ -120,7 +120,7 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
     return mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm
 
 def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, wav_nm, wav0_nm,
-                     error, residual, noisetype, kwargs_sim, savedir, pad=100, plot_ts=False):
+                     error, residual, noisetype, kwargs_sim, savedir, pad=100, plot_ts=False, colorbar=True):
     nobs = error.shape[0]
     # create fakemap
     if modelmap == "1spot":
@@ -193,7 +193,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
     allchips_flux = np.array(allchips_flux)
 
     fig, ax = plt.subplots()
-    sim_map.show(ax=ax, projection="moll", colorbar=True)
+    sim_map.show(ax=ax, projection="moll", colorbar=colorbar)
     plt.savefig(paths.figures / f"{savedir}/fakemap.pdf", bbox_inches="tight", dpi=300)
 
     if plot_ts:
@@ -203,7 +203,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     return observed
 
-def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir, pad=100):
+def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=17):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
     nobs = observed.shape[0]
@@ -275,14 +275,14 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.03, normed=True, intrinsic_profiles=intrinsic_profiles)
     
     ### Plot averaged line shapes
-    plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, savedir, gap=0.02)
+    plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, vsini, period, timestamps, savedir, gap=0.02, cut=cut)
 
     ### Plot deviation map for each chip and mean deviation map
-    plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median")
+    plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median", cut=cut)
 
     return intrinsic_profiles, obskerns_norm
 
-def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False):
+def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False, colorbar=False, plot_starry=False):
     print("*** Using solver IC14new ***")
     # Can safely take means over chips now
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
@@ -299,7 +299,14 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
         np.flip(bestparamgrid, axis=1), int(0.5*bestparamgrid.shape[1]), axis=1)
     # TODO: derotate map??? seems like Ic14 maps are flipped and rolled 180 deg
 
-    plot_IC14_map(bestparamgrid_r) # derotated
+    if plot_starry:
+        fig, ax = plt.subplots(figsize=(7,3))
+        showmap = starry.Map(ydeg=7)
+        showmap.load(bestparamgrid_r)
+        showmap.show(ax=ax, projection="moll", colorbar=colorbar)
+    
+    else:
+        plot_IC14_map(bestparamgrid_r) # derotated
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
@@ -318,7 +325,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
     else:
         return bestparamgrid_r
 
-def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False):
+def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver LSD+starry_lin ***")
         
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
@@ -347,8 +354,8 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     )
 
     image = map_av.render(projection="moll")         
-    fig, ax = plt.subplots()
-    map_av.show(ax=ax, projection="moll", image=image, colorbar=True)
+    fig, ax = plt.subplots(figsize=(7,3))
+    map_av.show(ax=ax, projection="moll", image=image, colorbar=colorbar)
     if annotate:
         ax.annotate(f"""
             chip={kwargs_fig['goodchips']}
@@ -362,7 +369,7 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
 
     return map_av
 
-def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=0.001, niter=5000, annotate=False):
+def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=0.001, niter=5000, annotate=False, colorbar=True):
     print("*** Using solver LSD+starry_opt ***")
     print(f"ydeg = {kwargs_run['ydeg']}")
 
@@ -436,7 +443,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
 
     map_res[:, :] = y_map   # The spherical harmonic coefficient vector. 
     fig, ax = plt.subplots()
-    map_res.show(ax=ax, projection="moll", colorbar=True, cmap="plasma")
+    map_res.show(ax=ax, projection="moll", colorbar=colorbar, cmap="plasma")
     if annotate:
         ax.annotate(f"""
             chip={kwargs_fig['goodchips']}
@@ -450,7 +457,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     
     return map_res
 
-def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False):
+def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver starry_lin***")
     goodchips = kwargs_fig['goodchips']
     nchip = len(goodchips)
@@ -495,7 +502,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
     images = np.array(images)
 
     fig, ax = plt.subplots()
-    maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=True)
+    maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=colorbar)
     if annotate:
         ax.annotate(f"""
             chip=median{goodchips} 
@@ -509,7 +516,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     return maps
 
-def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False):
+def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False, colorbar=True):
     print("*** Using solver starry_opt ***")
     goodchips = kwargs_fig['goodchips']
     nchip = len(goodchips)
@@ -573,7 +580,7 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     map_res[:, :] = y_map   # The spherical harmonic coefficient vector. 
     fig, ax = plt.subplots()
-    map_res.show(ax=ax, projection="moll", colorbar=True)
+    map_res.show(ax=ax, projection="moll", colorbar=colorbar)
     if annotate:
         ax.annotate(f"""
             chip={goodchips}
@@ -1176,22 +1183,26 @@ def plot_kerns_timeseries(kerns, goodchips, dv, gap=0.03, normed=False, intrinsi
         plt.xlabel("dv")
     plt.tight_layout()
 
-def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, savedir, gap=0.02):
+def plot_chipav_kern_timeseries(obskerns_norm, intrinsic_profiles, dv, vsini, period, timestamps, savedir, gap=0.025, cut=17):
     '''Plot time series of chip-averaged kerns.'''
     nobs = obskerns_norm.shape[0]
     colors = [cm.gnuplot_r(x) for x in np.linspace(0, 1, nobs+4)]
-    plt.figure(figsize=(4,4))
+    fig, ax = plt.subplots(figsize=(4, 5))
     for n in range(nobs):
-        plt.plot(dv, obskerns_norm[n].mean(axis=0) - gap*n, color=colors[n+1])
-    plt.plot(dv, 1-intrinsic_profiles.mean(axis=0), color='k', label="intrinsic profile")
-    plt.gca().axes.yaxis.set_ticklabels([])
-    plt.gca().axes.yaxis.set_ticks([])
-    plt.xlabel("velocity (km/s)")
-    plt.ylabel("epochs")
-    plt.legend(loc=4, bbox_to_anchor=(1,1))
+        ax.plot(dv[cut:-cut], obskerns_norm[n].mean(axis=0)[cut:-cut] - gap*n, color=colors[n+1])
+        #plt.text(dv[cut] + 10, 1 - gap/4 - gap*n, f"{timestamps[n]:.1f}h")
+    #plt.plot(dv, 1-intrinsic_profiles.mean(axis=0), color='k', label="intrinsic profile")
+    ax.set_xlabel("velocity (km/s)")
+    ax.set_ylabel("Line intensity")
+    ax2 = ax.twinx()
+    ax2.set_ylim(ax.get_ybound())
+    ax2.set_yticks([1- gap*n for n in range(nobs)], labels=[f"{t:.1f}h" for t in timestamps], fontsize=9)
+    #plt.axvline(x=vsini/1e3, color="k", linestyle="dashed", linewidth=1)
+    #plt.axvline(x=-vsini/1e3, color="k", linestyle="dashed", linewidth=1)
+    #plt.legend(loc=4, bbox_to_anchor=(1,1))
     plt.savefig(paths.figures / f"{savedir}/tsplot.pdf", bbox_inches="tight", dpi=300)
 
-def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median"):
+def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, meanby="median", cut=30):
     '''Plot deviation map for each chip and mean deviation map'''
     nobs, nchip, nk = obskerns_norm.shape
     uniform_profiles = np.zeros((nchip, nk))
@@ -1204,7 +1215,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, mea
             extent=(dv.max(), dv.min(), period, 0),
             aspect=int(vsini/1e3),
             cmap='YlOrBr') # positive diff means dark spot
-        plt.xlim(dv.min(), dv.max()),
+        plt.xlim(dv.min()+cut, dv.max()-cut),
         plt.xlabel("velocity (km/s)")
         plt.ylabel("Elapsed time (h)")
         plt.colorbar(fraction=0.035)
@@ -1220,30 +1231,31 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, period, savedir, mea
         extent=(dv.max(), dv.min(), period, 0),
         aspect=int(vsini/1e3),
         cmap='YlOrBr') # positive diff means dark spot
-    plt.xlim(dv.min(), dv.max()),
+    plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
     plt.ylabel("Elapsed time (h)")
     plt.colorbar(fraction=0.035)
     plt.title(f"{meanby} deviation")
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot_full.pdf", bbox_inches="tight", dpi=300)
-
     # plot only the mean map
-    plt.figure()
+    plt.figure(figsize=(5,3))
     plt.imshow(mean_dev, 
         extent=(dv.max(), dv.min(), period, 0),
         aspect=int(0.7* vsini/1e3),
         cmap='YlOrBr') # positive diff means dark spot
-    plt.xlim(dv.min(), dv.max()),
+    plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
     plt.ylabel("Elapsed time (h)")
-    plt.colorbar(fraction=0.035)
-    plt.title(f"{meanby} deviation")
-    plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
+    plt.vlines(x=vsini/1e3, ymin=0, ymax=period, colors="k", linestyles="dashed", linewidth=1)
+    plt.vlines(x=-vsini/1e3, ymin=0, ymax=period, colors="k", linestyles="dashed", linewidth=1)
+    plt.colorbar(fraction=0.036)
+    #plt.title(f"{meanby} deviation")
+    #plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.pdf", bbox_inches="tight", dpi=300)
 
-def plot_IC14_map(bestparamgrid):
+def plot_IC14_map(bestparamgrid, colorbar=False):
     '''Plot doppler map from an array.'''
     nlat, nlon = bestparamgrid.shape 
     fig = plt.figure(figsize=(7,3))
@@ -1251,8 +1263,14 @@ def plot_IC14_map(bestparamgrid):
     lon = np.linspace(-np.pi, np.pi, nlon)
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
     Lon,Lat = np.meshgrid(lon,lat)
-    im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading="gouraud")
-    fig.colorbar(im)
+    im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
+    if colorbar:
+        fig.colorbar(im)
+    ax.set_yticks(np.linspace(-np.pi/2, np.pi/2, 7), labels=[])
+    ax.set_xticks(np.linspace(-np.pi, np.pi, 13), labels=[])
+    ax.grid('major', color='k', linewidth=0.25)
+    for item in ax.spines.values():
+        item.set_linewidth(1.2)
 
 
 ################################################################################
