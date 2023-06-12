@@ -48,11 +48,6 @@ use_toy_spec = False
 modelmap = "1spot"
 noisetype = "res+random"
 
-vary_period = False
-period_solve = 6
-vary_inc = False
-inc_solve = 50
-
 fakemap_nlat, fakemap_nlon = 181, 361
 roll = 0.3 # 0-1
 contrast = 0.5
@@ -143,8 +138,8 @@ if True:
     #timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
     tobs = 5.1
     timestamp = np.linspace(0, tobs, nobs)
-    phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
-    theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
+    phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad; IC14
+    theta = 360.0 * timestamp / period      # 0 ~ 360 in degree; starry sim & run
 
     assert nobs == len(theta)
 

@@ -13,11 +13,11 @@ savedir = "sim_spotA"
 target = "W1049A"
 nk = 71
 nlat, nlon = 10, 20
-contrast = -0.5
+contrast = 0.5
 roll = 0.8
 noisetype = "res+random"
 
-goodchips_sim[instru][band] = [2, 3,4, 5, 7, 12, 13, 15, 16, 18]
+goodchips_sim[instru][band] = [2, 3,4] #, 5, 7, 12, 13, 15, 16, 18]
 #[3, 4, 5, 16, 18]
 
 #################### Automatic ####################################
@@ -69,7 +69,7 @@ if True:
 
     # set time and period parameters
     #timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
-    tobs = 5.1
+    tobs = 2
     timestamp = np.linspace(0, tobs, nobs)
     phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
     theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
@@ -117,12 +117,14 @@ if True:
 assert simulation_on == True
 assert savedir == "sim_spotA"
 
+print("Period:", period)
+print("theta", theta)
 # Load data from fit pickle
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Make mock observed spectra
 observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                            noisetype, kwargs_sim, savedir, r=20, lat=85, plot_ts=False, colorbar=False)
+                            noisetype, kwargs_sim, savedir, r=20, lat=40, plot_ts=True, colorbar=False)
 
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamp, savedir, cut=1)
