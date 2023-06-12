@@ -33,7 +33,7 @@ nobss =   {"W1049B": 14,     "W1049A": 14,     "2M0036_1103": 7   ,  "2M0036_110
 periods = {"W1049B": 5.28,   "W1049A": 7,      "2M0036_1103": 2.7 ,  "2M0036_1105": 2.7}
 incs =    {"W1049B": 80,     "W1049A": 70,     "2M0036_1103": 51  ,  "2M0036_1105": 51}
 vsinis =  {"W1049B": 29e3,   "W1049A": 21e3,   "2M0036_1103": 32e3,  "2M0036_1105": 32e3}
-rvs =     {"W1049B": 7.4e-5, "W1049A": 9.3e-5, "2M0036_1103": 6e-5,  "2M0036_1105": 6e-5}
+rvs =     {"W1049B": 7.4e-5, "W1049A": 5.4e-5, "2M0036_1103": 6e-5,  "2M0036_1105": 6e-5}
                 #9e-5 9.3e-5if CRIRES 7.4e-5 5.4e-5 if IGRINS
 
 ##############################################################################
@@ -140,7 +140,9 @@ if True:
     veq = vsini / np.sin(inc * np.pi / 180)
 
     # set time and period parameters
-    timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
+    #timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
+    tobs = 5.1
+    timestamp = np.linspace(0, tobs, nobs)
     phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
     theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
 
