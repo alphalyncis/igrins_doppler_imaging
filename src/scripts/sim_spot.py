@@ -10,8 +10,9 @@ from config_sim import *
 
 savedir = "sim_spot"
 nk = 101
-nlat, nlon = 10, 20
-contrast = 0.5
+nlat, nlon = 9, 18
+contrast = 0.8
+roll = 0.25
 noisetype = "res+random"
 
 #################### Automatic ####################################
@@ -113,7 +114,8 @@ assert savedir == "sim_spot"
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Make mock observed spectra
-observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, savedir, plot_ts=False, colorbar=False)
+observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
+                            savedir, r=30, lat=20, plot_ts=False, colorbar=False)
 
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamp, savedir, cut=30)

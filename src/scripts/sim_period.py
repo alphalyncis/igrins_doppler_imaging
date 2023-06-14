@@ -13,7 +13,7 @@ target = "W1049A"
 nk = 71
 contrast = 0.5
 roll = 0.8
-noisetype = "random"
+noisetype = "res+random"
 goodchips_sim[instru][band] = [2, 3, 4]
 
 tobs = 5
@@ -125,7 +125,7 @@ for period_true in [5, 6, 7, 8]:
 
     # Make mock observed spectra
     observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                                noisetype, kwargs_sim, savedir, r=30, lat=40, plot_ts=True, colorbar=False)
+                                noisetype, kwargs_sim, savedir, r=30, lat=30, plot_ts=True, colorbar=False)
 
     # Compute LSD mean profile
     intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamp, savedir, cut=1)

@@ -5,13 +5,18 @@ import paths
 ##############################################################################
 ####################    Configs     ##########################################
 ##############################################################################
-
 from config_sim import *
 
-savedir = "sim_nkvsncell"
-band = "K"
-contrast = 0.8
-noisetype = "res+random"
+modelmap = "1uniband"
+noisetype = "random"
+
+savedir = "sim_uniband"
+if not os.path.exists(paths.figures / savedir):
+    os.makedirs(paths.figures / savedir)
+
+nk = 101
+nlat, nlon = 10, 20
+
 #################### Automatic ####################################
 
 if True:
@@ -60,9 +65,11 @@ if True:
     veq = vsini / np.sin(inc * np.pi / 180)
 
     # set time and period parameters
-    timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
-    phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad
-    theta = 360.0 * timestamp / period      # 0 ~ 360 in degree
+    #timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
+    tobs = 5.1
+    timestamp = np.linspace(0, tobs, nobs)
+    phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad; IC14
+    theta = 360.0 * timestamp / period      # 0 ~ 360 in degree; starry sim & run
 
     assert nobs == len(theta)
 
@@ -99,44 +106,26 @@ if True:
         savedir=savedir
     )
 
-
 ##############################################################################
 ####################      Run!      ##########################################
 ##############################################################################
 
 assert simulation_on == True
-assert savedir == "sim_nkvsncell"
 
 # Load data from fit pickle
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Make mock observed spectra
 observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
-                            savedir, plot_ts=False, colorbar=False)
+                            savedir, r=15, lat=0, plot_ts=True, colorbar=False)
 
+# Compute LSD mean profile
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                     vsini, rv, period, timestamp, savedir, cut=30)
 
-for nlat, nlon in zip([9], [18]):
-    for alpha in [2000, 3000, 4000, 5000, 7500, 10000]:
-        cut = nk - 70
-        kwargs_IC14 = dict(
-            phases=phases, 
-            inc=inc, 
-            vsini=vsini, 
-            LLD=LLD, 
-            eqarea=use_eqarea, 
-            nlat=nlat, 
-            nlon=nlon,
-            alpha=alpha,
-            ftol=ftol
-        )
-        
-        # Compute LSD mean profile
-        intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
-                                                             vsini, rv, period, timestamp, savedir, cut=cut)
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
-        bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
-
-        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=niter_LSD, annotate=True)
 

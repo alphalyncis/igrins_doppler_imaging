@@ -124,34 +124,38 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
     nobs = error.shape[0]
     # create fakemap
     if modelmap == "1spot":
-        spot_brightness = 1 - contrast
+        spot_brightness = contrast
         print(f"Running spot contrast={spot_brightness}")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
         fakemap[np.sqrt((y+lat)**2 + (x-n_lon/2)**2) <= r] = spot_brightness
-        #im = np.mean(plt.imread(paths.data / 'modelmaps/1spot.png'), -1) # rgb to grayscale
-        #pattern = np.where(im < np.mean(im))
-        #fakemap = np.ones_like(im)
-        #fakemap[pattern] = spot_brightness
 
     elif modelmap == "1band":
         print(f"Running band amp = {contrast}")
         band_width = 15
         band_lat = 30
-        amp = contrast
+        amp = 1 - contrast
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
         band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
         fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
         #fakemap[band_ind] -= amp
+
+    elif modelmap == "1uniband":
+        print(f"Running band amp = {contrast}")
+        phase = 0.7 #0-1?
+        fakemap = np.ones((n_lat, n_lon))
+        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        band_ind = np.s_[(90-lat)-r:(90-lat)+r]
+        fakemap[band_ind] = contrast
         
     elif modelmap == "2band":
         print(f"Running band amp = {contrast}")
         band_width = 10
         band_lat = 45
         band2_lat = 0
-        amp = contrast
+        amp = 1 - contrast
         phase = 0.55 
         phase2 = 0.75
         fakemap = np.ones((n_lat, n_lon))
@@ -166,6 +170,12 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     elif modelmap == "gcm":
         fakemap = np.loadtxt(paths.data / 'modelmaps/gcm.txt')
+        fakemap /= np.median(fakemap)
+        diff = 1 - fakemap
+        ampold = diff.max()
+        amp = 1 - contrast
+        diffnew = diff * amp / ampold
+        fakemap = 1 - diffnew
         n_lat, n_lon = fakemap.shape
 
     fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
@@ -277,7 +287,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.03, normed=True, intrinsic_profiles=intrinsic_profiles)
     
     ### Plot averaged line shapes
-    plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02, cut=cut-13)
+    plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02, cut=int(cut/2+1))
 
     ### Plot deviation map for each chip and mean deviation map
     plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=cut)
@@ -1195,6 +1205,7 @@ def plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02
         #plt.text(dv[cut] + 10, 1 - gap/4 - gap*n, f"{timestamps[n]:.1f}h")
     #plt.plot(dv, 1-intrinsic_profiles.mean(axis=0), color='k', label="intrinsic profile")
     ax.set_xlabel("velocity (km/s)")
+    ax.set_xticks([-50, -25, 0, 25, 50])
     ax.set_ylabel("Line intensity")
     ax2 = ax.twinx()
     ax2.set_ylim(ax.get_ybound())
@@ -1248,6 +1259,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
         cmap='YlOrBr') # positive diff means dark spot
     plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
+    plt.xticks([-50, -25, 0, 25, 50])
     plt.ylabel("Elapsed time (h)")
     plt.vlines(x=vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)
     plt.vlines(x=-vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)

@@ -10,7 +10,7 @@ from config_run import *
 
 savedir = "igrinsK_nkvsncell"
 instru = "IGRINS"
-band = "K"
+band = "H"
 
 #################### Automatic ####################################
 
@@ -90,8 +90,9 @@ assert simulation_on == False
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
-for nlat, nlon in zip([7, 10, 16, 22], [14, 20, 32, 44]):
-    for nk in [31, 51, 101, 201]:
+for nlat, nlon in zip([7, 9, 10], [14, 18, 20]):
+    for nk in [71, 101]:
+        cut = nk - 70
         kwargs_IC14 = dict(
             phases=phases, 
             inc=inc, 
@@ -106,12 +107,13 @@ for nlat, nlon in zip([7, 10, 16, 22], [14, 20, 32, 44]):
         print(f"Running test nk={nk} vs nlatlon={nlat} {nlon}...")
         
         # Compute LSD mean profile
-        intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, savedir)
+        intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                             vsini, rv, period, timestamp, savedir, cut=cut)
 
         # Solve by IC14
-        bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=True)
+        bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
-        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=True)
+        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
     print("Run success.")
 

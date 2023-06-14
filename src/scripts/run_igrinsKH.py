@@ -10,8 +10,10 @@ from config_run import *
 
 savedir = "igrinsHK"
 band = "both"
-nk = 71
-nlat, nlon = 10, 20
+nk = 101
+cut = nk - 70
+nlat, nlon = 9, 18
+alpha=10000
 
 
 #################### Automatic ####################################
@@ -124,20 +126,34 @@ kwargs_fig = dict(
 )
 
 # Compute LSD mean profile
-intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps[target], savedir, cut=1)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                    vsini, rv, period, timestamps[target], savedir, cut=cut)
 
-# Solve by 5 solvers
-#bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+for LLD in [0.7]:
+    kwargs_IC14 = dict(
+        phases=phases, 
+        inc=inc, 
+        vsini=vsini, 
+        LLD=LLD, 
+        eqarea=use_eqarea, 
+        nlat=nlat, 
+        nlon=nlon,
+        alpha=alpha,
+        ftol=ftol
+    )
+    
+    # Solve by 5 solvers
+    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
-#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=False, colorbar=False)
+    #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=False, colorbar=False)
 
-#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
-#plt.figure(figsize=(5,3))
-#plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
+    #lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
+    #plt.figure(figsize=(5,3))
+    #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-#opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=2000, annotate=True)
+    #opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=2000, annotate=True)
 
-print("Run success.")
+    print("Run success.")
 
