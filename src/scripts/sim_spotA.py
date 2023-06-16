@@ -13,9 +13,11 @@ if not os.path.exists(paths.figures / savedir):
     os.makedirs(paths.figures / savedir)
 
 target = "W1049A"
-nk = 71
-nlat, nlon = 10, 20
-contrast = 0.2
+nk = 75
+nlat, nlon = 9, 18
+LLD = 0.7
+alpha = 7500
+contrast = 0.8
 roll = 0.8
 noisetype = "res+random"
 tobs = 5.07
@@ -123,17 +125,32 @@ print("theta", theta)
 # Load data from fit pickle
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
-# Make mock observed spectra
-observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                            noisetype, kwargs_sim, savedir, r=20, lat=30, plot_ts=True, colorbar=False)
+for r in [20, 30, 35]:
+    for lat in [20, 40, 60, 80]:
 
-# Compute LSD mean profile
-intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
-                                                     vsini, rv, period, timestamp, savedir, cut=1)
+        # Make mock observed spectra
+        observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
+                                    noisetype, kwargs_sim, savedir, r=r, lat=lat, plot_ts=True, colorbar=False)
 
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+        kwargs_IC14 = dict(
+            phases=phases, 
+            inc=inc, 
+            vsini=vsini, 
+            LLD=LLD, 
+            eqarea=use_eqarea, 
+            nlat=nlat, 
+            nlon=nlon,
+            alpha=alpha,
+            ftol=ftol
+        )
 
-LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+        # Compute LSD mean profile
+        intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                            vsini, rv, period, timestamp, savedir, cut=nk-70)
+
+        bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+
+        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=niter_LSD, annotate=True)
 

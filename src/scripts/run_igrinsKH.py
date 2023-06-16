@@ -10,10 +10,10 @@ from config_run import *
 
 savedir = "igrinsHK"
 band = "both"
-nk = 101
+nk = 75
 cut = nk - 70
 nlat, nlon = 9, 18
-alpha=10000
+LLD = 0.7
 
 
 #################### Automatic ####################################
@@ -129,7 +129,7 @@ kwargs_fig = dict(
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                     vsini, rv, period, timestamps[target], savedir, cut=cut)
 
-for LLD in [0.7]:
+for alpha in [2000, 5000, 7500, 10000]:
     kwargs_IC14 = dict(
         phases=phases, 
         inc=inc, 

@@ -206,7 +206,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     fig, ax = plt.subplots()
     sim_map.show(ax=ax, projection="moll", colorbar=colorbar)
-    plt.savefig(paths.figures / f"{savedir}/fakemap.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/fakemap.png", bbox_inches="tight", dpi=100)
 
     if plot_ts:
         plot_timeseries(sim_map, model_flux, kwargs_sim["theta"], obsflux=simulated_flux, overlap=2)
@@ -267,7 +267,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
             plt.title(f"{pmod} model vs. lines at t={t}")
     plt.legend(loc=4, fontsize=9)
     #plt.show()
-    plt.savefig(paths.output / "LSD_deltaspecs.pdf")
+    plt.savefig(paths.output / "LSD_deltaspecs.png")
     
     # shift kerns to center
     #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
@@ -330,7 +330,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100)
 
     if ret_both:
         return bestparamgrid_r, bestparamgrid
@@ -377,7 +377,7 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
             contrast={kwargs_fig['noisetype']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.png", bbox_inches="tight", dpi=100)
 
     return map_av
 
@@ -443,7 +443,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     ax.plot(loss[int(len(loss)/20):])
     ax.set_xlabel("iteration number")
     ax.set_ylabel("loss")
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.png", bbox_inches="tight", dpi=100)
 
     # Plot the MAP map
     map_res = starry.Map(kwargs_run['ydeg'], kwargs_run['udeg'], inc=kwargs_run['inc'])
@@ -465,7 +465,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.png", bbox_inches="tight", dpi=100)
     
     return map_res
 
@@ -508,7 +508,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
         for i, jj in enumerate(successchips):
             maps[0].show(ax=axs[i], projection="moll", image=images[i], colorbar=False)
             axs[i].annotate(f"chip {jj}", xy=(-1.6, -1))
-        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.pdf", bbox_inches="tight", dpi=300)
+        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.png", bbox_inches="tight", dpi=300)
 
     # plot chip-averaged map
     images = np.array(images)
@@ -524,7 +524,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.png", bbox_inches="tight", dpi=300)
 
     return maps
 
@@ -581,7 +581,7 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
     ax.plot(loss[int(len(loss)/10):])
     ax.set_xlabel("iteration number")
     ax.set_ylabel("loss")
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5_loss.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5_loss.png", bbox_inches="tight", dpi=300)
 
     # Plot the MAP map
     map_res = starry.Map(**kwargs_run)
@@ -602,7 +602,7 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.png", bbox_inches="tight", dpi=300)
 
     return map_res
 
@@ -1213,7 +1213,7 @@ def plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02
     #plt.axvline(x=vsini/1e3, color="k", linestyle="dashed", linewidth=1)
     #plt.axvline(x=-vsini/1e3, color="k", linestyle="dashed", linewidth=1)
     #plt.legend(loc=4, bbox_to_anchor=(1,1))
-    plt.savefig(paths.figures / f"{savedir}/tsplot.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/tsplot.png", bbox_inches="tight", dpi=300)
 
 def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=30):
     '''Plot deviation map for each chip and mean deviation map'''
@@ -1250,7 +1250,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.colorbar(fraction=0.035)
     plt.title(f"{meanby} deviation")
     plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot_full.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=300)
     # plot only the mean map
     plt.figure(figsize=(5,3))
     plt.imshow(mean_dev, 
@@ -1267,7 +1267,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     #plt.title(f"{meanby} deviation")
     #plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot.pdf", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100)
 
 def plot_IC14_map(bestparamgrid, colorbar=False):
     '''Plot doppler map from an array.'''
@@ -1322,7 +1322,7 @@ def test_obs():
 
     lin_map = solve_starry_lin(mean_spectrum, observed, annotate=True)
     #plt.figure(figsize=(5,3))
-    #plt.savefig(paths.figures / "sim/solver4.pdf", bbox_inches="tight", dpi=300)
+    #plt.savefig(paths.figures / "sim/solver4.png", bbox_inches="tight", dpi=300)
 
     opt_map = solve_starry_opt(mean_spectrum, observed, lr=lr, niter=2000, annotate=True)
 

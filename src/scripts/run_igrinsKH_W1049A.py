@@ -12,8 +12,10 @@ savedir = "igrinsHK_W1049A"
 
 target = "W1049A"
 band = "both"
-nk = 101
-nlat, nlon = 10, 20
+nk = 75
+nlat, nlon = 9, 18
+LLD = 0.7
+alpha = 7500
 
 
 #################### Automatic ####################################
@@ -126,7 +128,8 @@ kwargs_fig = dict(
 )
 
 # Compute LSD mean profile
-intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps[target], savedir, cut=30)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                     vsini, rv, period, timestamps[target], savedir, cut=nk-70)
 
 # Solve by 5 solvers
 bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
