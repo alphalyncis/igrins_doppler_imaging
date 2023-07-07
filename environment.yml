@@ -14,3 +14,4 @@ dependencies:
       - tqdm>=4.56.0
       - starry-process==0.9.8
       - starry==1.2.0
+      - emcee==3.1.0

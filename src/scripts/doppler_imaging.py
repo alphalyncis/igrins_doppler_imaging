@@ -16,6 +16,7 @@ import pymc3_ext as pmx
 import theano.tensor as tt
 from tqdm import tqdm
 from matplotlib.colors import Normalize
+import emcee
 
 import analysis3 as an # for an.lsq and an.gfit
 import ELL_map_class as ELL_map
@@ -302,7 +303,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
     observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips
 
-    bestparamgrid = solve_DIME(
+    bestparamgrid, cc = solve_DIME(
         observation_norm, mean_profile,
         dbeta, nk, nobs, **kwargs_IC14, plot_cells=True
     )
@@ -333,9 +334,9 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100)
 
     if ret_both:
-        return bestparamgrid_r, bestparamgrid
+        return bestparamgrid_r, bestparamgrid, cc
     else:
-        return bestparamgrid_r
+        return bestparamgrid_r, cc
 
 def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver LSD+starry_lin ***")
@@ -1091,6 +1092,76 @@ def solve_DIME(
         perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
         w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
 
+    spotfit = True
+    if spotfit:
+        print("Running MCMC spot fitting...")
+        nstep = 1500
+        # Do a one-spot fit:
+        guess = [100, 90, 0.8, 2.3, 0.5] # 100?, spot_brightness%, spotlat, spotlon, spotradius
+        limits = [[99.99, 100.01], [0, np.inf], [-np.pi/2., np.pi/2.], [0, 2*np.pi], [0, np.pi]]
+        spotargs0 = (mmap.corners_latlon.mean(2)[:,1].reshape(nlat, nlon), mmap.corners_latlon.mean(2)[:,0].reshape(nlat, nlon) - np.pi/2., Rmatrix)
+        spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits))
+        thisfit = an.fmin(an.errfunc, guess, args=spotargs, full_output=True)
+        test = dime.profile_spotmap(guess, *spotargs0)
+        
+        def lnprobfunc(*arg, **kw):
+            ret = -0.5 * an.errfunc(*arg, **kw)
+            if 'nans_allowed' in kw and (not kw.pop('nans_allowed')) or not (np.isfinite(ret)):
+                print( "Whoops -- nan detected, but nans NOT ALLOWED in lnprobfunc!")
+                ret = 9e99
+            return ret
+        # MCMC for one-spot fit:
+        ndim = len(guess)
+        nwalkers = ndim*30
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprobfunc, args=spotargs, threads=3)
+        junk = np.abs(thisfit[0])/100.
+        junk[0] = 0.01
+        p0, testchi = get_emcee_start(thisfit[0], junk, nwalkers, thisfit[1]*2, spotargs, retchisq=True)
+
+        p1, prob, state = sampler.run_mcmc(p0, nstep) # Burn-in
+        sampler.reset()
+        p2, prob, state = sampler.run_mcmc(p1, nstep)
+        spotparams = sampler.flatchain[np.nonzero(sampler.lnprobability.ravel()==sampler.lnprobability.ravel().max())[0][0]]
+
+        if False:
+            # Do a two-spot fit:
+            guess2 = np.concatenate((bestparams, bestparams[1:])) 
+            guess2[5] = 2*guess2[0] - guess2[1]
+            guess2[6] = -guess2[6]
+            guess2[7] = (guess2[3] + np.pi) % (2*np.pi)
+
+            limits2 = limits + limits[1:]
+            spotargs2 = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits2))
+            thisfit = an.fmin(pc.errfunc, guess2, args=spotargs2, full_output=True)
+            test = dime.profile_spotmap(guess2, *spotargs0)
+
+            # MCMC for two-spot fit:
+            ndim2 = len(guess2)
+            nwalkers2 = ndim2*30
+            sampler2 = emcee.EnsembleSampler(nwalkers2, ndim2, pc.lnprobfunc, args=spotargs2, threads=3)
+            junk = np.abs(thisfit[0])/100.
+            junk[0] = 0.01
+            p0, testchi = tools.get_emcee_start(thisfit[0], junk, nwalkers2, thisfit[1]*2, spotargs2, retchisq=True)
+
+            p1, prob, state = sampler2.run_mcmc(p0, nstep) # Burn-in
+            sampler2.reset()
+            p2, prob, state = sampler2.run_mcmc(p1, nstep) # Burn-in
+            spotparams2 = sampler2.flatchain[nonzero(sampler2.lnprobability.ravel()==sampler2.lnprobability.ravel().max())[0][0]]
+
+        
+        cc = sampler.flatchain.copy()
+        if inc==0: cc[:,2] = abs(cc[:,2])
+        cc[:,2:] *= (180/np.pi) 
+        ind  = np.array([1,2,4])
+        labs = ['Spot Brightness [%]', 'Spot Latitude [deg]', 'Spot Radius [deg]']
+        spotmap = makespot(spotparams[2], spotparams[3], spotparams[4], *spotargs0[0:2])
+        print("Spot params:", spotparams[2:], cc)
+        plt.figure(figsize=(5,3))
+        plt.imshow(spotmap)
+        plt.colorbar()
+        #fig, axs = an.plotcorrs(cc[:,ind], docontour=[.683, .954], nbins=50, labs=labs)
+        
+
     ### Solve!
     fitargs = (sc_observation_norm, w_observation, Rmatrix, alpha)
     bfit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
@@ -1133,7 +1204,148 @@ def solve_DIME(
     else:
         bestparamgrid = np.reshape(bestparams, (-1, nlon))
 
-    return bestparamgrid
+    return bestparamgrid, cc
+
+def get_emcee_start(bestparams, variations, nwalkers, maxchisq, args, homein=True, retchisq=False, depth=np.inf):
+    """Get starting positions for EmCee walkers.
+
+    :INPUTS:
+      bestparams : sequence (1D NumPy array)
+        Optimal parameters for your fitting function (length N)
+
+      variations : 1D or 2D NumPy array
+        If 1D, this should be length N and new trial positions will be
+        generated using numpy.random.normal(bestparams,
+        variations). Thus all values should be greater than zero!
+
+        If 2D, this should be size (N x N) and we treat it like a
+        covariance matrix; new trial positions will be generated using
+        numpy.random.multivariate_normal(bestparams, variations). 
+
+      nwalkers : int
+        Number of positions to be chosen.
+
+      maxchisq : int
+        Maximum "chi-squared" value for a test position to be
+        accepted.  In fact, these values are computed with
+        :func:`phasecurves.errfunc` as errfunc(test_position, *args)
+        and so various priors, penalty factors, etc. can also be
+        passed in as keywords.
+
+      args : tuple
+        Arguments to be passed to :func:`phasecurves.errfunc` for
+        computing 'chi-squared' values.
+
+      homein : bool
+        If True, "home-in" on improved fitting solutions. In the
+        unlikely event that a randomly computed test position returns
+        a better chi-squared than your specified best parameters,
+        reset the calculation to start from the new, improved set of
+        parameters.
+
+      retchisq : bool
+        If True, return the tuple (positions, chisq_at_positions)
+        
+     :BAD_EXAMPLE:
+      ::
+
+        pos0 = tools.get_emcee_start(whitelight_bestfit[0], np.abs(whitelight_bestfit[0])/1000., nwalkers, 10*nobs, mcargs)
+        """
+    # 2013-05-01 11:18 IJMC: Created
+    # 2014-07-24 11:07 IJMC: Fixed typo in warning message.
+    
+    #get_emcee_start(bestparams, variations, nwalkers, maxchisq, args):
+
+    best_chisq = an.errfunc(bestparams, *args)
+    if best_chisq >= maxchisq:
+        print("Specified parameter 'maxchisq' is smaller than the chi-squared value for the specified best parameters. Try increasing maxchisq.")
+        return -1
+
+    npar = len(bestparams)
+    if variations.ndim==2:
+        usecovar = True
+    else:
+        usecovar = False
+
+    pos0 = np.zeros((nwalkers, npar), dtype=float)
+    chisq = np.zeros(nwalkers, dtype=float)
+    npos = 0
+    while npos < nwalkers:
+        if usecovar:
+            testpos = np.random.multivariate_normal(bestparams, variations)
+        else:
+            testpos = np.random.normal(bestparams, variations)
+        testchi = an.errfunc(testpos, *args)
+        if np.isfinite(testchi) and (testchi < best_chisq) and homein and depth>0:
+            return get_emcee_start(testpos, variations, nwalkers, maxchisq, args, homein=homein, retchisq=retchisq, depth=depth-1)
+        elif testchi < maxchisq:
+            pos0[npos] = testpos
+            chisq[npos] = testchi
+            npos += 1
+
+    if retchisq:
+        ret = pos0, chisq
+    else:
+        ret = pos0
+    return ret
+
+def makespot(spotlat, spotlon, spotrad, phi, theta):
+    """
+    :INPUTS:
+      spotlat : scalar
+        Latitude of spot center, in radians, from 0 to pi
+
+      spotlon : scalar
+        Longitude of spot center, in radians, from 0 to 2pi
+
+      spotrad : scalar
+        Radius of spot, in radians.
+
+      phi, theta : 2D NumPy arrays
+         output from :func:`makegrid`.  Theta ranges from -pi/2 to +pi/2.
+
+    :EXAMPLE:
+      ::
+
+        import maps
+        nlat, nlon = 60, 30
+        phi, theta = maps.makegrid(nlat, nlon)
+        # Make a small spot centered near, but not at, the equator:
+        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        # Make a larger spot centered near, but not at, the pole:
+        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+
+      ::
+
+        import maps
+        nlat, nlon = 60, 30
+        map = maps.map(nlat, nlon, i=0., deltaphi=0.)
+        phi = map.corners_latlon.mean(2)[:,1].reshape(nlon, nlat)
+        theta = map.corners_latlon.mean(2)[:,0].reshape(nlon, nlat) - np.pi/2.
+        # Make a small spot centered near, but not at, the equator:
+        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        # Make a larger spot centered near, but not at, the pole:
+        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+
+    """
+    # 2013-08-18 16:01 IJMC: Created
+
+    pi2 = 0.5*np.pi
+    xyz = np.array((np.cos(phi) * np.sin(theta + pi2), np.sin(phi) * np.sin(theta + pi2), np.cos(theta + pi2))).reshape(3, phi.size)
+
+    # First rotate around z axis, to align spot with sub-observer meridian
+    # Then, rotate around y axis, to align spot with pole.
+    zrot = np.array([[np.cos(np.pi-spotlon), -np.sin(np.pi-spotlon), 0], [np.sin(np.pi-spotlon), np.cos(np.pi-spotlon), 0.], [0,0,1]])
+    yrot = np.array([[np.cos(spotlat+pi2), 0, np.sin(spotlat+pi2)], [0,1,0], [-np.sin(spotlat+pi2), 0, np.cos(spotlat+pi2)]])
+    xyz = np.dot(np.dot(yrot, zrot), xyz)
+
+    # Convert Cartesian to spherical coordinates
+    ang = np.arccos(xyz[2])
+
+    # Spot is where (theta - theta_pole) < radius.
+    spotmap = ang.T <= spotrad
+
+    return spotmap.reshape(phi.shape)
 
 def remove_spike(data, kern_size=10, lim_denom=5):
     data_pad = np.concatenate([np.ones(kern_size)*np.median(data[:kern_size]), data, np.ones(kern_size)*np.median(data[-kern_size:-1])])

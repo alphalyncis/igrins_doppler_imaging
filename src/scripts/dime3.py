@@ -136,8 +136,6 @@ def profile_spotmap(param, *args, **kw):
     """
     # 2013-08-19 09:59 IJMC: Created
     # 2013-08-27 10:45 IJMC: Updated to multi-spot-capable
-    from maps3 import makespot
-
     phi, theta, R = args[0:3]
     nparam = len(param)
     nspots = int((nparam-1)/4)
@@ -150,6 +148,62 @@ def profile_spotmap(param, *args, **kw):
 
     return normalize_model(np.dot(map_pixels.ravel(), R), nk)
 
+def makespot(spotlat, spotlon, spotrad, phi, theta):
+    """
+    :INPUTS:
+      spotlat : scalar
+        Latitude of spot center, in radians, from 0 to pi
 
+      spotlon : scalar
+        Longitude of spot center, in radians, from 0 to 2pi
+
+      spotrad : scalar
+        Radius of spot, in radians.
+
+      phi, theta : 2D NumPy arrays
+         output from :func:`makegrid`.  Theta ranges from -pi/2 to +pi/2.
+
+    :EXAMPLE:
+      ::
+
+        import maps
+        nlat, nlon = 60, 30
+        phi, theta = maps.makegrid(nlat, nlon)
+        # Make a small spot centered near, but not at, the equator:
+        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        # Make a larger spot centered near, but not at, the pole:
+        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+
+      ::
+
+        import maps
+        nlat, nlon = 60, 30
+        map = maps.map(nlat, nlon, i=0., deltaphi=0.)
+        phi = map.corners_latlon.mean(2)[:,1].reshape(nlon, nlat)
+        theta = map.corners_latlon.mean(2)[:,0].reshape(nlon, nlat) - np.pi/2.
+        # Make a small spot centered near, but not at, the equator:
+        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        # Make a larger spot centered near, but not at, the pole:
+        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+
+    """
+    # 2013-08-18 16:01 IJMC: Created
+
+    pi2 = 0.5*np.pi
+    xyz = np.array((np.cos(phi) * np.sin(theta + pi2), np.sin(phi) * np.sin(theta + pi2), np.cos(theta + pi2))).reshape(3, phi.size)
+
+    # First rotate around z axis, to align spot with sub-observer meridian
+    # Then, rotate around y axis, to align spot with pole.
+    zrot = np.array([[np.cos(np.pi-spotlon), -np.sin(np.pi-spotlon), 0], [np.sin(np.pi-spotlon), np.cos(np.pi-spotlon), 0.], [0,0,1]])
+    yrot = np.array([[np.cos(spotlat+pi2), 0, np.sin(spotlat+pi2)], [0,1,0], [-np.sin(spotlat+pi2), 0, np.cos(spotlat+pi2)]])
+    xyz = np.dot(np.dot(yrot, zrot), xyz)
+
+    # Convert Cartesian to spherical coordinates
+    ang = np.arccos(xyz[2])
+
+    # Spot is where (theta - theta_pole) < radius.
+    spotmap = ang.T <= spotrad
+
+    return spotmap.reshape(phi.shape)
 
 

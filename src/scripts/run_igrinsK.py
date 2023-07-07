@@ -15,6 +15,7 @@ cut = nk - 70
 nlat, nlon = 9, 18
 LLD = 0.7
 goodchips_run[instru][target][band] = [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
+use_eqarea = False
 
 #################### Automatic ####################################
 
@@ -22,8 +23,6 @@ if True:
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
-    if map_type == "eqarea":
-        use_eqarea = True
 
     nobs = nobss[target]
 
@@ -100,7 +99,7 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-for alpha in [3000, 5000, 7500, 10000]:
+for alpha in [7000]:
     kwargs_IC14 = dict(
         phases=phases, 
         inc=inc, 
@@ -113,9 +112,9 @@ for alpha in [3000, 5000, 7500, 10000]:
         ftol=ftol
     )
     
-    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    bestparamgrid_r, bestparamgrid, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
-    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 

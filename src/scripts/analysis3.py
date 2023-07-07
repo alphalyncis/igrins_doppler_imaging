@@ -2780,6 +2780,284 @@ def fmin_powell(func, x0, args=(), kw=dict(), xtol=1e-4, ftol=1e-4, maxiter=None
 
     return retlist
 
+def errfunc(*arg, **kw):
+    """Generic function to give the chi-squared error on a generic
+        function or functions:
+
+    :INPUTS:
+       (fitparams, function, arg1, arg2, ... , depvar, weights)
+
+      OR:
+       
+       (fitparams, function, arg1, arg2, ... , depvar, weights, kw)
+
+      OR:
+       
+       (allparams, (args1, args2, ..), npars=(npar1, npar2, ...))
+
+       where allparams is an array concatenation of each functions
+       input parameters.
+
+      If the last argument is of type dict, it is assumed to be a set
+      of keyword arguments: this will be added to errfunc2's direct
+      keyword arguments, and will then be passed to the fitting
+      function **kw.  This is necessary for use with various fitting
+      and sampling routines (e.g., kapteyn.kmpfit and emcee.sampler)
+      which do not allow keyword arguments to be explicitly passed.
+      So, we cheat!  Note that any keyword arguments passed in this
+      way will overwrite keywords of the same names passed in the
+      standard, Pythonic, way.
+
+
+    :OPTIONAL INPUTS:
+      jointpars -- list of 2-tuples.  
+                   For use with multi-function calling (w/npars
+                   keyword).  Setting jointpars=[(0,10), (0,20)] will
+                   always set params[10]=params[0] and
+                   params[20]=params[0].
+
+      gaussprior -- list of 2-tuples (or None values), same length as "fitparams."
+                   The i^th tuple (x_i, s_i) imposes a Gaussian prior
+                   on the i^th parameter p_i by adding ((p_i -
+                   x_i)/s_i)^2 to the total chi-squared.  Here in
+                   :func:`devfunc`, we _scale_ the error-weighted
+                   deviates such that the resulting chi-squared will
+                   increase by the desired amount.
+
+      uniformprior -- list of 2-tuples (or 'None's), same length as "fitparams."
+                   The i^th tuple (lo_i, hi_i) imposes a uniform prior
+                   on the i^th parameter p_i by requiring that it lie
+                   within the specified "high" and "low" limits.  We
+                   do this (imprecisely) by multiplying the resulting
+                   deviates by 1e9 for each parameter outside its
+                   limits.
+
+      ngaussprior -- list of 3-tuples of Numpy arrays.
+                   Each tuple (j_ind, mu, cov) imposes a multinormal
+                   Gaussian prior on the parameters indexed by
+                   'j_ind', with mean values specified by 'mu' and
+                   covariance matrix 'cov.' This is the N-dimensional
+                   generalization of the 'gaussprior' option described
+                   above. Here in :func:`devfunc`, we _scale_ the
+                   error-weighted deviates such that the resulting
+                   chi-squared will increase by the desired amount.
+
+                   For example, if parameters 0 and 3 are to be
+                   jointly constrained (w/unity means), set: 
+                     jparams = np.array([0, 3])
+                     mu = np.array([1, 1])
+                     cov = np.array([[1, .9], [9., 1]])
+                     ngaussprior=[[jparams, mu, cov]]  # Double brackets are key!
+
+      scaleErrors -- bool
+                   If True, instead of chi^2 we return:
+                     chi^2 / s^2  +  2N ln(s)
+                   Where 's' is the first input parameter (pre-pended
+                   to those used for the specified function) and N the
+                   number of datapoints.
+   
+
+                   In this case, the first element of 'fitparams'
+                   ("s") is used to rescale the measurement
+                   uncertainties. Thus weights --> weights/s^2, and
+                   chi^2 --> 2 N log(s) + chi^2/s^2 (for N data points).  
+
+
+    EXAMPLE: 
+      ::
+
+       from numpy import *
+       import phasecurves
+       def sinfunc(period, x): return sin(2*pi*x/period)
+       snr = 10
+       x = arange(30.)
+       y = sinfunc(9.5, x) + randn(len(x))/snr
+       guess = 8.
+       period = optimize.fmin(phasecurves.errfunc,guess,args=(sinfunc,x, y, ones(x.shape)*snr**2))
+
+    """
+    # 2009-12-15 13:39 IJC: Created
+    # 2010-11-23 16:25 IJMC: Added 'testfinite' flag keyword
+    # 2011-06-06 10:52 IJMC: Added 'useindepvar' flag keyword
+    # 2011-06-24 15:03 IJMC: Added multi-function (npars) and
+    #                        jointpars support.
+    # 2011-06-27 14:34 IJMC: Flag-catching for multifunc calling
+    # 2012-03-23 18:32 IJMC: testfinite and useindepvar are now FALSE
+    #                        by default.
+    # 2012-05-01 01:04 IJMC: Adding surreptious keywords, and GAUSSIAN
+    #                        PRIOR capability.
+    # 2012-05-08 16:31 IJMC: Added NGAUSSIAN option.
+    # 2012-10-16 09:07 IJMC: Added 'uniformprior' option.
+    # 2013-02-26 11:19 IJMC: Reworked return & concatenation in 'npars' cases.
+    # 2013-03-08 12:54 IJMC: Added check for chisq=0 in penalty-factor cases.
+    # 2013-04-30 15:33 IJMC: Added C-based chi-squared calculator;
+    #                        made this function separate from devfunc.
+    # 2013-07-23 18:32 IJMC: Now 'ravel' arguments for C-based function.
+    # 2013-10-12 23:47 IJMC: Added 'jointpars1' keyword option.
+    # 2014-05-02 11:45 IJMC: Added 'scaleErrors' keyword option..
+
+    import pdb
+    #pdb.set_trace()
+    params = np.array(arg[0], copy=False)
+    #if 'wrapped_joint_params' in kw:
+    #    params = unwrap_joint_params(params, kw['wrapped_joint_params'])
+
+    if isinstance(arg[-1], dict): 
+        # Surreptiously setting keyword arguments:
+        kw2 = arg[-1]
+        kw.update(kw2)
+        arg = arg[0:-1]
+    else:
+        pass
+
+
+    if len(arg)==2:
+        chisq = errfunc(params, *arg[1], **kw)
+
+    else:
+        testfinite = ('testfinite' in kw) and kw['testfinite']
+        if not ('useindepvar' in kw):
+            kw['useindepvar'] = False
+
+        # Keep fixed pairs of joint parameters:
+        if ('jointpars1' in kw):
+            jointpars1 = kw['jointpars1']
+            for jointpar1 in jointpars1:
+                params[jointpar1[1]] = params[jointpar1[0]]
+
+
+        if ('gaussprior' in kw) and kw['gaussprior'] is not None:
+            # If any priors are None, redefine them:
+            temp_gaussprior =  kw['gaussprior']
+            gaussprior = []
+            for pair in temp_gaussprior:
+                if pair is None:
+                    gaussprior.append([0, np.inf])
+                else:
+                    gaussprior.append(pair)
+        else:
+            gaussprior = None
+
+        if ('uniformprior' in kw):
+            # If any priors are None, redefine them:
+            temp_uniformprior =  kw['uniformprior']
+            uniformprior = []
+            for pair in temp_uniformprior:
+                if pair is None:
+                    uniformprior.append([-np.inf, np.inf])
+                else:
+                    uniformprior.append(pair)
+        else:
+            uniformprior = None
+
+        if ('ngaussprior' in kw) and kw['ngaussprior'] is not None:
+            # If any priors are None, redefine them:
+            temp_ngaussprior =  kw['ngaussprior']
+            ngaussprior = []
+            for triplet in temp_ngaussprior:
+                if len(triplet)==3:
+                    ngaussprior.append(triplet)
+        else:
+            ngaussprior = None
+
+
+        #print "len(arg)>>", len(arg),
+
+        #pdb.set_trace()
+        if ('npars' in kw):
+            npars = kw['npars']
+            chisq = 0.0
+            # Excise "npars" kw for recursive calling:
+            lower_kw = kw.copy()
+            junk = lower_kw.pop('npars')
+
+            # Keep fixed pairs of joint parameters:
+            if ('jointpars' in kw):
+                jointpars = kw['jointpars']
+                for jointpar in jointpars:
+                    params[jointpar[1]] = params[jointpar[0]]
+                #pdb.set_trace()
+
+            for ii in range(len(npars)):
+                i0 = sum(npars[0:ii])
+                i1 = i0 + npars[ii]
+                these_params = arg[0][i0:i1]
+                #ret.append(devfunc(these_params, *arg[1][ii], **lower_kw))
+                these_params, lower_kw = subfit_kw(arg[0], kw, i0, i1)
+                #if 'wrapped_joint_params' in lower_kw:
+                #    junk = lower_kw.pop('wrapped_joint_params')
+                chisq  += errfunc(these_params, *arg[ii+1], **lower_kw)
+                #pdb.set_trace()
+            return chisq
+
+        else: # Single function-fitting
+            depvar = arg[-2]
+            weights = arg[-1]
+
+            if not kw['useindepvar']:  # Standard case:
+                functions = arg[1]
+                helperargs = arg[2:len(arg)-2]
+            else:                      # Obsolete, deprecated case:
+                functions = arg[1] 
+                helperargs = arg[2:len(arg)-3]
+                indepvar = arg[-3]
+
+
+
+        if testfinite:
+            finiteind = isfinite(indepvar) * isfinite(depvar) * isfinite(weights)
+            indepvar = indepvar[finiteind]
+            depvar = depvar[finiteind]
+            weights = weights[finiteind]
+
+        doScaleErrors = 'scaleErrors' in kw and kw['scaleErrors']==True
+        if doScaleErrors:
+            #pdb.set_trace()
+            if not kw['useindepvar'] or arg[1].__name__=='multifunc' or \
+                    arg[1].__name__=='sumfunc':
+                model = functions(*((params[1:],)+helperargs))
+            else:  # i.e., if useindepvar is True -- old, deprecated usage:
+                model = functions(*((params[1:],)+helperargs + (indepvar,)))
+
+            # Compute the weighted residuals:
+            chisq = (weights*((model-depvar))**2).sum()
+            chisq = chisq/params[0]**2 + 2*depvar.size*np.log(np.abs(params[0]))
+
+        else:
+            if not kw['useindepvar'] or arg[1].__name__=='multifunc' or \
+                    arg[1].__name__=='sumfunc':
+                model = functions(*((params,)+helperargs))
+            else:  # i.e., if useindepvar is True -- old, deprecated usage:
+                model = functions(*((params,)+helperargs + (indepvar,)))
+
+            # Compute the weighted residuals:
+            chisq = (weights*(model-depvar)**2).sum()
+            
+
+        # Compute 1D and N-D gaussian, and uniform, prior penalties:
+        additionalChisq = 0.
+        if gaussprior is not None:
+            #pdb.set_trace()
+            additionalChisq += np.sum([((param0 - gprior[0])/gprior[1])**2 for \
+                                   param0, gprior in zip(params, gaussprior)])
+
+        if ngaussprior is not None:
+            for ind, mu, cov in ngaussprior:
+                dvec = params[ind] - mu
+                additionalChisq += \
+                    np.dot(dvec.transpose(), np.dot(np.linalg.inv(cov), dvec))
+
+        if uniformprior is not None:
+            for param0, uprior in zip(params, uniformprior):
+                if (param0 < uprior[0]) or (param0 > uprior[1]):
+                    chisq *= 1e9
+
+        # Scale up the residuals so as to impose priors in chi-squared
+        # space:
+        chisq += additionalChisq
+    
+    return chisq
+
 def gaussian2d(p, x, y):
     """ Compute a 2D gaussian distribution at the points x, y.
 
@@ -4639,3 +4917,319 @@ def rv_semiamplitude(m1=None, m2=None, P=None, a=None, K=None, e=0., approx=Fals
                 ret = np.real(validroots)
 
     return ret
+
+def plotcorrs(params, labs=None, tit=None, xrot=0, yrot=0, cmap=None,figsize=None,plotregion=[.1,.1,.8,.8], n=6, nbins=None, clim=None, docontour=False, contourcolor='k', newfig=True):
+    """ Plot correlation coefficient matrix in one big, huge, honkin'
+     figure.  Color-code the figure based on the correlation
+     coefficients between parameters.
+
+     :INPUTS:
+       params -- (M x N array)  M instantiations of a set of N parameters.
+
+     :OPTIONS:
+       labs -- (list) labels for each of the N parameters
+
+       tit -- (str) title for figure
+
+       xrot/yrot -- (float) axis label rotation, in degrees
+
+       cmap -- (matplotlib cm) -- colormap for color-coding.
+
+       figsize -- (2-list) -- width and height of figure
+
+       plotregion -- (4-list) -- (left, bottom, width, height) of plotted region in each figure
+
+       n -- (int) -- number of subplots across each figure
+
+       nbins : int
+         Bin the data into this many bins, and show 2D histograms instead of points.
+
+       clim : None
+         Colorscale limits for normalized 2D histograms (where hist.sum() = 1.0)
+
+       docontour : bool
+         Whether to plot contours, or do an 'imshow'
+
+       newfig : bool
+         Whether to generate a new figure, or plot in the current axes.
+
+       contourcolor 
+         Color of contour line, if "docontour" is set to a list of confidence intervals.
+
+     :REQUIREMENTS: :doc:`pylab`, :doc:`nsdata`
+
+     :NOTES:  
+       Based on the concept by Nymyer and Harrington at U. Central Florida
+
+       Beware of plotting two many points, and clogging your system!
+    """
+    # 2010-05-27 09:27 IJC: Created
+    # 2010-08-26 14:49 IJC: Added test for higher-rank dimensional
+    # 2010-08-27 09:21 IJC: Moved 'tit' title text lower
+    # 2011-11-03 12:03 IJMC: Added 'nbins' option
+    # 2012-03-30 09:04 IJMC: Moved axes labels to upper-right, rather than lower-left.
+    # 2013-08-19 13:17 IJMC: Added 'docontour' option.
+    # 2013-10-09 14:59 IJMC: Added 'newfig' option.
+
+    import pylab as py
+    #import kdestats as kde
+    n = int(n)
+
+    n, m = params.shape
+    if n>=m:
+        npts0 = n
+        nparam = m
+    else:
+        npts0 = m
+        nparam = n
+        params = params.copy().transpose()
+
+    if nbins is not None:
+        nbins = int(nbins)
+        hist_bins = [py.linspace(min(params[:,ii]), max(params[:,ii]), nbins+1) for ii in range(nparam)]
+        hist_cmap = cmap
+
+    nind = params.shape[1]
+    if labs is None:
+        labs = ['']*nind
+    if figsize is None:
+        figsize = [9,9]
+    nperpage = min(n,nind-1)
+
+    nfigs = py.ceil(float(nind-1.)/nperpage).astype(int)
+    #print "nind, nperpage, nfigs>>",nind, nperpage, nfigs
+    subx0,suby0, xwid,ywid = plotregion
+    subdx = xwid/(nperpage) # was nind-1.
+    subdy = ywid/(nperpage) # was nind-1.
+    #print "subx0,suby0,subdx,subdy>>",[subx0,suby0,subdx,subdy]
+
+
+    oldaxlinewidth = py.rcParams['axes.linewidth']
+    if nind>40:
+        py.rcParams['axes.linewidth'] = 0
+
+    figs = []
+    allsubplots = []
+    # Iterate over figure columns
+    def getfigs():
+        """Return a list of all open matplotlib figures.
+
+        No inputs or options."""
+        from matplotlib._pylab_helpers import Gcf
+
+        figs = [manager.canvas.figure for manager in Gcf.get_all_fig_managers()]
+        figlist = [fig.number for fig in figs]
+
+        return figlist
+    def nextfig():
+        """Return one greater than the largest-numbered figure currently
+        open. If no figures are open, return unity.
+
+        No inputs or options."""
+        # 2010-03-01 14:28 IJC: Created
+        figlist = getfigs()
+        if len(figlist)==0:
+            return 1
+        else:
+            return max(figlist)+1
+            
+        return figlist
+    for kk2 in range(nfigs):
+        # Iterate over figure rows
+        for kk1 in range(nfigs):
+            if newfig:
+                f=py.figure(nextfig(),figsize)
+            else:
+                f = py.gcf()
+            subplots = []
+            jj0 = 0
+            #Iterate over subplot columns:
+            for jj in range(nperpage*kk2, min(nperpage*(kk2+1),nind)):
+                # Set the vertical panel offset:
+                if kk1==kk2:  # a figure on the diagonal
+                    ii0 = jj0+1
+                elif kk1>kk2: # a figure below the diagonal
+                    ii0 = 1
+                #Iterate over subplots rows:
+                for ii in range(max(jj+1,nperpage*kk1+1), min(nperpage*(kk1+1)+1,nind)):
+                    #print '(kk2,kk1,jj,jj0,ii,ii0): (%i,%i,%i,%i,%i,%i)'%(kk2,kk1,jj,jj0,ii,ii0), [subx0+subdx*jj0,suby0+subdy*(nperpage-ii0),subdx,subdy]
+                    s = py.axes([subx0+subdx*jj0,suby0+subdy*(nperpage-ii0),subdx,subdy])
+                    param_doesnt_vary = params[:,jj].std()==0 or params[:,ii].std()==0 or \
+                        (py.np.abs(params[:,jj].std()/py.median(params[:,jj])) < 1e-9) or \
+                        (py.np.abs(params[:,ii].std()/py.median(params[:,ii])) < 1e-9)
+                    if nbins is None or param_doesnt_vary:
+                        py.plot(params[:,jj],params[:,ii],',k')
+                        #pdb.set_trace()
+                    else:
+                        #pdb.set_trace()
+                        thishist = py.histogram2d(params[:,jj], params[:,ii], \
+                                                      bins=[hist_bins[jj], hist_bins[ii]])
+                        if docontour:
+                            xplot = 0.5*(thishist[1][1:] + thishist[1][0:-1])
+                            yplot = 0.5*(thishist[2][1:] + thishist[2][0:-1])
+                            if hasattr(docontour, '__iter__'):
+                                clev = [confmap(1.0*thishist[0]/npts0, thisDC) for thisDC in docontour]
+                                py.contour(xplot, yplot, 1.0*thishist[0].transpose()/npts0, clev, colors=contourcolor, linewidths=2)
+                            else:
+                                py.contourf(xplot, yplot, 1.0*thishist[0].transpose()/npts0, cmap=hist_cmap)
+                            h_axis = py.xlim() + py.ylim()
+                        else:
+                            ns_imshow(1.0*thishist[0].transpose()/npts0, x=thishist[1], y=thishist[2], cmap=hist_cmap)
+                            h_axis = py.xlim() + py.ylim()[::-1]
+                        #pdb.set_trace()
+                            py.axis(h_axis)
+                        if clim is None:
+                            py.clim([0., thishist[0].ravel().max()*1.0/npts0])
+                        else:
+                            py.clim(clim)
+
+                    if jj0>0:  # 
+                        s.set_yticklabels('');
+                    else:
+                        #py.ylabel(labs[ii], rotation=yrot)
+                        pass
+                    if newfig: s.set_yticks(s.get_yticks()[1:-1]);
+                    if ii0 == (jj0+1):
+                        s.get_xaxis().set_label_position('top')
+                        py.xlabel(labs[jj])
+                        s.get_yaxis().set_label_position('right')
+                        py.ylabel(labs[ii])#, rotation='horizontal')
+                        s.get_yaxis().get_label().set_rotation(90)
+                    if ii0<(nperpage-1) and ii<(nind-1):
+                        s.set_xticklabels('');
+                    else:
+                        #py.xlabel(labs[jj],rotation=xrot)
+                        s.get_xaxis().set_major_formatter(py.FormatStrFormatter('%01.2f'));
+                    if newfig: s.set_xticks(s.get_xticks()[1:-1]);
+                    if nperpage>10:
+                        s.set_xticklabels('');
+                        s.set_yticklabels('');
+                    if nperpage>50:
+                        s.set_xticks([])
+                        s.set_yticks([])
+                    else:
+                        [obj.set_rotation(90.) for obj in s.get_xticklabels()] ; 
+                    if cmap is not None:
+                        s.set_axis_bgcolor(cmap(.3+.7*abs(py.corrcoef(params[:,jj],params[:,ii])[0,1])))
+                    #py.title('(kk2,kk1,jj,jj0,ii,ii0): (%i,%i,%i,%i,%i,%i)'%(kk2,kk1,jj,jj0,ii,ii0))
+                    if nbins is not None and (not param_doesnt_vary):
+                        py.axis(h_axis)
+                    subplots.append(s)
+                    ii0 += 1
+
+                jj0+=1
+
+            figs.append(f)
+            allsubplots.append(subplots)
+
+    if tit is not None:
+        f.text(.5,.9,tit,fontsize=24,horizontalalignment='center')
+
+
+    py.draw()
+    py.rcParams['axes.linewidth'] = oldaxlinewidth
+
+    for ff,ss in zip(figs,allsubplots):
+        if len(ss)==0:
+            py.close(ff)
+            
+
+    return figs, allsubplots
+
+def ns_imshow(data, x=[], y=[], aspect='auto', interpolation='nearest', cmap=None, vmin=[], vmax=[]):
+    """ Version of pylab's IMSHOW with my own defaults:
+    ::
+
+      imshow(data, aspect='auto', interpolation='nearest', cmap=cm.gray, vmin=[], vmax=[])
+
+    Other IMSHOW options are default, but a new one exists: 
+          x=  and y=  let you set the axes values by passing in the x and y coordinates."""
+    #2008-07-25 18:30 IJC: Created to save a little bit of time and do axes.
+
+    #from pylab import arange, cm, imshow
+	
+    from matplotlib.pyplot import  cm, imshow
+    from numpy import arange
+    
+    if cmap==None:
+        cmap = cm.gray
+
+    def getextent(data, x, y):
+        """ Gets the extent of the data for plotting.  Subfunc of IMSHOW."""
+        dsh = data.shape
+
+        if len(x)==0:
+            x = arange(dsh[1])
+        if len(y)==0:
+            y = arange(dsh[0])
+
+        dx = 1.0* (x.max() - x.min()) / (len(x) - 1)
+        xextent = [x.min() - dx/2.0, x.max() + dx/2.0]
+        xextent = [x[0] - dx/2.0, x[-1] + dx/2.0]
+
+        dy = 1.0* (y.max() - y.min()) / (len(y) - 1)
+        yextent = [y.max() + dy/2.0, y.min() - dy/2.0]
+        yextent = [y[-1] + dy/2.0, y[0] - dy/2.0]
+
+        extent = xextent + yextent
+        
+        return extent
+
+    def getclim(data, vmin, vmax):
+        if vmin.__class__==list:
+            vmin = data.min()
+        if vmax.__class__==list:
+            vmax = data.max()
+        return [vmin, vmax]
+    
+    #------------- Start the actual routine -------------
+
+    extent = getextent(data, x,y)
+    clim   = getclim(data, vmin, vmax)
+    imshow(data, aspect=aspect, interpolation=interpolation, cmap=cmap, 
+              vmin=clim[0], vmax=clim[1], extent=extent)
+    
+
+
+def confmap(map, frac, **kw):
+    """Return the confidence level of a 2D histogram or array that
+    encloses the specified fraction of the total sum.
+
+    :INPUTS:
+      map : 1D or 2D numpy array
+        Probability map (from hist2d or kde)
+
+      frac : float, 0 <= frac <= 1
+        desired fraction of enclosed energy of map
+
+    :OPTIONS:
+      ordinate : None or 1D array
+        If 1D map, interpolates onto the desired value.  This could
+        cause problems when you aren't just setting upper/lower
+        limits....
+    """
+    # 2010-07-26 12:54 IJC: Created
+    # 2011-11-05 14:29 IJMC: Fixed so it actually does what it's supposed to!
+    from scipy.optimize import bisect
+
+    def diffsum(level, map, ndesired):
+        return ((1.0*map[map >= level].sum()/map.sum() - ndesired))
+
+    if hasattr(frac,'__iter__'):
+        return [confmap(map,thisfrac, **kw) for thisfrac in frac]
+
+    #nx, ny = map.shape
+    #ntot = map.size
+    #n = int(ntot*frac)
+
+    #guess = map.max()
+    #dx = 10.*float((guess-map.min())/ntot)
+    #thisn = map[map<=guess].sum()
+
+    ret = bisect(diffsum, map.min(), map.max(), args=(map, frac))
+    if kw.has_key('ordinate') and kw['ordinate'] is not None:
+        sortind = np.argsort(map)
+        ret = np.interp(ret, map[sortind], kw['ordinate'][sortind])
+
+    return ret
+

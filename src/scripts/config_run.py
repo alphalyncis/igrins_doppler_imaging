@@ -79,6 +79,7 @@ timestamps = { # obs times in hour, computed from obs headers (JD-DATE)
 simulation_on = False
 savedir = "igrinsH"
 use_toy_spec = False
+use_eqarea = True
 
 #################### Run settings ####################################
 
@@ -123,8 +124,6 @@ if True:
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
-    if map_type == "eqarea":
-        use_eqarea = True
 
     nobs = nobss[target]
 
