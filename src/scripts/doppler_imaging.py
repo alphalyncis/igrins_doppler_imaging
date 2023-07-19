@@ -1100,9 +1100,10 @@ def solve_DIME(
         print("Running MCMC spot fitting...")
         nstep = 2500
         # Do a one-spot fit:
-        guess = [100,                  90,          0.8,                  2.3,         0.5] 
-        #        100?,           spot_brightness%, spotlat,               spotlon,     spotradius
-        limits = [[99.99, 100.01], [0, np.inf],    [-np.pi/2., np.pi/2.], [0, 2*np.pi], [0, np.pi]]
+        guess = [100,              80,               30,          180,          30          ] 
+        #        100?,             spot_brightness%, spotlat=46°, spotlon=132°, spotradius=28°
+        #limits = [[99.99, 100.01], [0, 200],        [-90, 90],   [0, 360],     [10, 50]] # uniform prior
+        limits = [[100, 0.001],    [90, 20],        [30, 20],    [180, 100],   [30, 20]]
         spotargs0 = (mmap.corners_latlon.mean(2)[:,1].reshape(nlat, nlon), mmap.corners_latlon.mean(2)[:,0].reshape(nlat, nlon) - np.pi/2., Rmatrix)
         spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits))
         thisfit = an.fmin(an.errfunc, guess, args=spotargs, full_output=True)
@@ -1117,14 +1118,14 @@ def solve_DIME(
         # MCMC for one-spot fit:
         ndim = len(guess)
         nwalkers = ndim*30
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprobfunc, args=spotargs, threads=3)
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprobfunc, args=spotargs, threads=6)
         junk = np.abs(thisfit[0])/100.
         junk[0] = 0.01
         p0, testchi = get_emcee_start(thisfit[0], junk, nwalkers, thisfit[1]*2, spotargs, retchisq=True)
 
-        p1, prob, state = sampler.run_mcmc(p0, nstep) # Burn-in
-        sampler.reset()
-        p2, prob, state = sampler.run_mcmc(p1, nstep)
+        #p1, prob, state = sampler.run_mcmc(p0, nstep) # Burn-in
+        #sampler.reset()
+        p2, prob, state = sampler.run_mcmc(p0, nstep)
         spotparams = sampler.flatchain[np.nonzero(sampler.lnprobability.ravel()==sampler.lnprobability.ravel().max())[0][0]]
 
         if False:
@@ -1153,20 +1154,18 @@ def solve_DIME(
             spotparams2 = sampler2.flatchain[nonzero(sampler2.lnprobability.ravel()==sampler2.lnprobability.ravel().max())[0][0]]
 
         cc = sampler.flatchain.copy()
-        if inc==0: cc[:,2] = abs(cc[:,2])
-        cc[:,2:] *= (180/np.pi) 
+        if inc==0: 
+            cc[:,2] = abs(cc[:,2])
         ind  = np.array([1,2,4])
         labs = ['Spot Brightness [%]', 'Spot Latitude [deg]', 'Spot Radius [deg]']
         spotmap = makespot(spotparams[2], spotparams[3], spotparams[4], *spotargs0[0:2])
-        print(f"Spot brightness: {spotparams[1]:.2f}\n"
-            f"Spot lat: {spotparams[2]*(180/np.pi):.2f}\n",
-              f"spot lon: {spotparams[3]*(180/np.pi):.2f}\n",
-              f"spot radius: {spotparams[4]*(180/np.pi):.2f}\n", 
+        print(f"Spot brightness: {spotparams[1]:.0f}\n"
+            f"Spot lat: {spotparams[2]:.0f}\n",
+              f"spot lon: {spotparams[3]:.0f}\n",
+              f"spot radius: {spotparams[4]:.0f}\n", 
               cc)
         plt.figure(figsize=(5,3))
-        plt.imshow(spotmap, extent=(0, np.pi*2, -np.pi/2, np.pi/2))
-        plt.colorbar()
-        #fig, axs = an.plotcorrs(cc[:,ind], docontour=[.683, .954], nbins=50, labs=labs)
+        plt.imshow(spotmap, origin="lower", extent=(0, 360, -90, 90))
         
     ### Solve!
     fitargs = (sc_observation_norm, w_observation, Rmatrix, alpha)
@@ -1303,13 +1302,13 @@ def makespot(spotlat, spotlon, spotrad, phi, theta):
     """
     :INPUTS:
       spotlat : scalar
-        Latitude of spot center, in radians, from 0 to pi
+        Latitude of spot center, in degrees, from 0 to 180 (actually from -90 to 90)
 
       spotlon : scalar
-        Longitude of spot center, in radians, from 0 to 2pi
+        Longitude of spot center, in degrees, from 0 to 360
 
       spotrad : scalar
-        Radius of spot, in radians.
+        Radius of spot, in radians. degrees
 
       phi, theta : 2D NumPy arrays
          output from :func:`makegrid`.  Theta ranges from -pi/2 to +pi/2.
@@ -1321,9 +1320,9 @@ def makespot(spotlat, spotlon, spotrad, phi, theta):
         nlat, nlon = 60, 30
         phi, theta = maps.makegrid(nlat, nlon)
         # Make a small spot centered near, but not at, the equator:
-        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        equator_spot = maps.makespot(0, 0, 23, phi, theta)
         # Make a larger spot centered near, but not at, the pole:
-        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+        pole_spot = maps.makespot(68, 0, 40, phi, theta)
 
       ::
 
@@ -1333,12 +1332,16 @@ def makespot(spotlat, spotlon, spotrad, phi, theta):
         phi = map.corners_latlon.mean(2)[:,1].reshape(nlon, nlat)
         theta = map.corners_latlon.mean(2)[:,0].reshape(nlon, nlat) - np.pi/2.
         # Make a small spot centered near, but not at, the equator:
-        equator_spot = maps.makespot(0, 0, 0.4, phi, theta)
+        equator_spot = maps.makespot(0, 0, 23, phi, theta)
         # Make a larger spot centered near, but not at, the pole:
-        pole_spot = maps.makespot(1.2, 0, 0.7, phi, theta)
+        pole_spot = maps.makespot(68, 0, 40, phi, theta)
 
     """
     # 2013-08-18 16:01 IJMC: Created
+
+    spotlat *= (np.pi/180)
+    spotlon *= (np.pi/180)
+    spotrad *= (np.pi/180)
 
     pi2 = 0.5*np.pi
     xyz = np.array((np.cos(phi) * np.sin(theta + pi2), np.sin(phi) * np.sin(theta + pi2), np.cos(theta + pi2))).reshape(3, phi.size)

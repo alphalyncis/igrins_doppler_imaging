@@ -10,11 +10,6 @@ from config_run import *
 
 savedir = "igrinsK"
 band = "K"
-nk = 75
-cut = nk - 70
-nlat, nlon = 9, 18
-LLD = 0.7
-u1 = LLD
 goodchips_run[instru][target][band] = [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
 use_eqarea = False
 
