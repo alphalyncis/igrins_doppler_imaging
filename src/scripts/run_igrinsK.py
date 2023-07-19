@@ -14,6 +14,7 @@ nk = 75
 cut = nk - 70
 nlat, nlon = 9, 18
 LLD = 0.7
+u1 = LLD
 goodchips_run[instru][target][band] = [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
 use_eqarea = False
 
@@ -99,7 +100,7 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-for alpha in [7000]:
+for alpha in [5000]:
     kwargs_IC14 = dict(
         phases=phases, 
         inc=inc, 
@@ -112,17 +113,17 @@ for alpha in [7000]:
         ftol=ftol
     )
     
-    bestparamgrid_r, bestparamgrid, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    #bestparamgrid_r, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=True)
 
-    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
+LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 
-#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
+lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-#opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=2000, annotate=True)
+opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
 
 print("Run success.")
 

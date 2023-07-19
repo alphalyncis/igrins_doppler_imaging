@@ -207,7 +207,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     fig, ax = plt.subplots()
     sim_map.show(ax=ax, projection="moll", colorbar=colorbar)
-    plt.savefig(paths.figures / f"{savedir}/fakemap.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{savedir}/fakemap.png", bbox_inches="tight", dpi=100, transparent=True)
 
     if plot_ts:
         plot_timeseries(sim_map, model_flux, kwargs_sim["theta"], obsflux=simulated_flux, overlap=2)
@@ -268,7 +268,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
             plt.title(f"{pmod} model vs. lines at t={t}")
     plt.legend(loc=4, fontsize=9)
     #plt.show()
-    plt.savefig(paths.output / "LSD_deltaspecs.png")
+    plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
     #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
@@ -295,7 +295,8 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
 
     return intrinsic_profiles, obskerns_norm
 
-def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, ret_both=True, annotate=False, colorbar=False, plot_starry=False):
+def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
+                  ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False):
     print("*** Using solver IC14new ***")
     # Can safely take means over chips now
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
@@ -305,7 +306,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
 
     bestparamgrid, cc = solve_DIME(
         observation_norm, mean_profile,
-        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True
+        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit
     )
 
     bestparamgrid_r = np.roll(
@@ -331,12 +332,14 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, re
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
-    if ret_both:
-        return bestparamgrid_r, bestparamgrid, cc
-    else:
+    if spotfit:
         return bestparamgrid_r, cc
+    if ret_both:
+        return bestparamgrid_r, bestparamgrid
+    else:
+        return bestparamgrid_r
 
 def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver LSD+starry_lin ***")
@@ -378,7 +381,7 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
             contrast={kwargs_fig['noisetype']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver2.png", bbox_inches="tight", dpi=100, transparent=True)
 
     return map_av
 
@@ -444,7 +447,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     ax.plot(loss[int(len(loss)/20):])
     ax.set_xlabel("iteration number")
     ax.set_ylabel("loss")
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # Plot the MAP map
     map_res = starry.Map(kwargs_run['ydeg'], kwargs_run['udeg'], inc=kwargs_run['inc'])
@@ -466,7 +469,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.png", bbox_inches="tight", dpi=100, transparent=True)
     
     return map_res
 
@@ -509,7 +512,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
         for i, jj in enumerate(successchips):
             maps[0].show(ax=axs[i], projection="moll", image=images[i], colorbar=False)
             axs[i].annotate(f"chip {jj}", xy=(-1.6, -1))
-        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.png", bbox_inches="tight", dpi=300)
+        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4_each.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # plot chip-averaged map
     images = np.array(images)
@@ -525,7 +528,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.png", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.png", bbox_inches="tight", dpi=100, transparent=True)
 
     return maps
 
@@ -582,7 +585,7 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
     ax.plot(loss[int(len(loss)/10):])
     ax.set_xlabel("iteration number")
     ax.set_ylabel("loss")
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5_loss.png", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5_loss.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # Plot the MAP map
     map_res = starry.Map(**kwargs_run)
@@ -603,7 +606,7 @@ def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_run['u1']}""",
         xy=(-2, -1), fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.png", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver5.png", bbox_inches="tight", dpi=100, transparent=True)
 
     return map_res
 
@@ -1000,7 +1003,8 @@ def solve_DIME(
         nlat: int = 20, nlon: int = 40,
         alpha: int = 4500, ftol: float = 0.01,
         plot_cells: bool = False,
-        plot_unstretched_map: bool = False
+        plot_unstretched_map: bool = False,
+        spotfit: bool = False
 ) -> np.ndarray:
     """
     Copied from IC14orig except kerns used to compute weights should take 
@@ -1092,13 +1096,13 @@ def solve_DIME(
         perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
         w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
 
-    spotfit = True
-    if spotfit:
+    if spotfit and not eqarea:
         print("Running MCMC spot fitting...")
-        nstep = 1500
+        nstep = 2500
         # Do a one-spot fit:
-        guess = [100, 90, 0.8, 2.3, 0.5] # 100?, spot_brightness%, spotlat, spotlon, spotradius
-        limits = [[99.99, 100.01], [0, np.inf], [-np.pi/2., np.pi/2.], [0, 2*np.pi], [0, np.pi]]
+        guess = [100,                  90,          0.8,                  2.3,         0.5] 
+        #        100?,           spot_brightness%, spotlat,               spotlon,     spotradius
+        limits = [[99.99, 100.01], [0, np.inf],    [-np.pi/2., np.pi/2.], [0, 2*np.pi], [0, np.pi]]
         spotargs0 = (mmap.corners_latlon.mean(2)[:,1].reshape(nlat, nlon), mmap.corners_latlon.mean(2)[:,0].reshape(nlat, nlon) - np.pi/2., Rmatrix)
         spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits))
         thisfit = an.fmin(an.errfunc, guess, args=spotargs, full_output=True)
@@ -1148,20 +1152,22 @@ def solve_DIME(
             p2, prob, state = sampler2.run_mcmc(p1, nstep) # Burn-in
             spotparams2 = sampler2.flatchain[nonzero(sampler2.lnprobability.ravel()==sampler2.lnprobability.ravel().max())[0][0]]
 
-        
         cc = sampler.flatchain.copy()
         if inc==0: cc[:,2] = abs(cc[:,2])
         cc[:,2:] *= (180/np.pi) 
         ind  = np.array([1,2,4])
         labs = ['Spot Brightness [%]', 'Spot Latitude [deg]', 'Spot Radius [deg]']
         spotmap = makespot(spotparams[2], spotparams[3], spotparams[4], *spotargs0[0:2])
-        print("Spot params:", spotparams[2:], cc)
+        print(f"Spot brightness: {spotparams[1]:.2f}\n"
+            f"Spot lat: {spotparams[2]*(180/np.pi):.2f}\n",
+              f"spot lon: {spotparams[3]*(180/np.pi):.2f}\n",
+              f"spot radius: {spotparams[4]*(180/np.pi):.2f}\n", 
+              cc)
         plt.figure(figsize=(5,3))
-        plt.imshow(spotmap)
+        plt.imshow(spotmap, extent=(0, np.pi*2, -np.pi/2, np.pi/2))
         plt.colorbar()
         #fig, axs = an.plotcorrs(cc[:,ind], docontour=[.683, .954], nbins=50, labs=labs)
         
-
     ### Solve!
     fitargs = (sc_observation_norm, w_observation, Rmatrix, alpha)
     bfit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
@@ -1204,7 +1210,11 @@ def solve_DIME(
     else:
         bestparamgrid = np.reshape(bestparams, (-1, nlon))
 
-    return bestparamgrid, cc
+    if spotfit:
+        return bestparamgrid, sampler
+    
+    else:
+        return bestparamgrid, None
 
 def get_emcee_start(bestparams, variations, nwalkers, maxchisq, args, homein=True, retchisq=False, depth=np.inf):
     """Get starting positions for EmCee walkers.
@@ -1425,7 +1435,7 @@ def plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02
     #plt.axvline(x=vsini/1e3, color="k", linestyle="dashed", linewidth=1)
     #plt.axvline(x=-vsini/1e3, color="k", linestyle="dashed", linewidth=1)
     #plt.legend(loc=4, bbox_to_anchor=(1,1))
-    plt.savefig(paths.figures / f"{savedir}/tsplot.png", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/tsplot.png", bbox_inches="tight", dpi=300, transparent=True)
 
 def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=30):
     '''Plot deviation map for each chip and mean deviation map'''
@@ -1462,7 +1472,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.colorbar(fraction=0.035)
     plt.title(f"{meanby} deviation")
     plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=300)
+    plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=100, transparent=True)
     # plot only the mean map
     plt.figure(figsize=(5,3))
     plt.imshow(mean_dev, 
@@ -1479,7 +1489,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     #plt.title(f"{meanby} deviation")
     #plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100)
+    plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
 
 def plot_IC14_map(bestparamgrid, colorbar=False):
     '''Plot doppler map from an array.'''

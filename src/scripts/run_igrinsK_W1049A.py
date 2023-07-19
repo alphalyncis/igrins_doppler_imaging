@@ -15,7 +15,7 @@ band = "K"
 nk = 75
 cut = nk - 70
 LLD = 0.7
-alpha = 7500
+alpha = 5000
 nlat, nlon = 9, 18
 goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7,8,13,14,15,16,17,18,19]
 
