@@ -8,12 +8,11 @@ import paths
 
 from config_sim import *
 modelmap = "gcm"
-ydeg_sim = 20
+ydeg_sim = 25
 savedir = "sim_gcm"
-nk = 101
-nlat, nlon = 10, 20
-contrast = 0
-noisetype = "res+random"
+contrast = 0.7
+noisetype = "random"
+roll = 0.28
 
 #################### Automatic ####################################
 
@@ -25,7 +24,7 @@ if True:
     nobs = nobss[target]
 
     # set chips to include
-    goodchips = goodchips_sim[instru][band]
+    goodchips = goodchips_sim[instru][target][band]
     if use_toy_spec:
         goodchips = [4]
     nchip = len(goodchips)
@@ -113,15 +112,25 @@ assert savedir == "sim_gcm"
 # Load data from fit pickle
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
-# Make mock observed spectra
-observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, savedir, plot_ts=False)
+bestparamgrid_rs = []
+for i in range(5):
+    # Make mock observed spectra
+    observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, savedir, 
+                                plot_ts=False, colorbar=False)
 
-# Compute LSD mean profile
-intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamp, savedir, cut=30)
+    # Compute LSD mean profile
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                        vsini, rv, period, timestamp, savedir, cut=cut)
 
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    bestparamgrid_rs.append(bestparamgrid_r)
 
-LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+bestparamgrid_r = np.mean(np.array(bestparamgrid_rs), axis=0)
+plot_IC14_map(bestparamgrid_r)
+plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
+
+
+#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=niter_LSD, annotate=False, colorbar=False)
 

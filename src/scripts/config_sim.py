@@ -77,7 +77,7 @@ modelmap = "1spot"
 noisetype = "res+random"
 
 fakemap_nlat, fakemap_nlon = 181, 361
-roll = 0.3 # 0-1
+roll = 0.28 # 0-1
 contrast = 0.5
 smoothing = 0.1
 
@@ -94,19 +94,20 @@ modelspec = "t1500g1000f8"
 LSD = "new"
 
 ########## IC14 parameters ##########
-nk = 103 if instru != "CRIRES" else 203
-LLD = 1.0
-alpha = 4500
+nk = 75 if instru != "CRIRES" else 203
+cut = nk - 70
+LLD = 0.7
+alpha = 5000
 ftol = 0.01 # tolerance for convergence of maximum-entropy
 nstep = 2000
-nlat, nlon = 10, 20
+nlat, nlon = 9, 18
 
 ########## Starry parameters ##########
 ydeg_sim = 15
 ydeg = 8
 udeg = 1
 nc = 1
-u1 = 0.3
+u1 = LLD
 vsini_max = 40000.0
 
 ########## Starry optimization parameters ##########
