@@ -1102,8 +1102,8 @@ def solve_DIME(
         # Do a one-spot fit:
         guess = [100,              80,               30,          180,          30          ] 
         #        100?,             spot_brightness%, spotlat=46°, spotlon=132°, spotradius=28°
-        #limits = [[99.99, 100.01], [0, 200],        [-90, 90],   [0, 360],     [10, 50]] # uniform prior
-        limits = [[100, 0.001],    [90, 20],        [30, 20],    [180, 100],   [30, 20]]
+        limits = [[99.99, 100.01], [0, 200],        [-90, 90],   [0, 360],     [10, 50]] # uniform prior
+        #limits = [[100, 0.001],    [90, 20],        [30, 20],    [180, 100],   [30, 20]]
         spotargs0 = (mmap.corners_latlon.mean(2)[:,1].reshape(nlat, nlon), mmap.corners_latlon.mean(2)[:,0].reshape(nlat, nlon) - np.pi/2., Rmatrix)
         spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits))
         thisfit = an.fmin(an.errfunc, guess, args=spotargs, full_output=True)
