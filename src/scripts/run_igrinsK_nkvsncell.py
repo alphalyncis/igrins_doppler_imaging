@@ -11,6 +11,8 @@ from config_run import *
 savedir = "igrinsK_nkvsncell"
 instru = "IGRINS"
 band = "H"
+goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+modelspec = "t1400g1000f8"
 
 #################### Automatic ####################################
 
@@ -90,30 +92,75 @@ assert simulation_on == False
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
-for nlat, nlon in zip([7, 9, 10], [14, 18, 20]):
-    for nk in [71, 101]:
-        cut = nk - 70
-        kwargs_IC14 = dict(
-            phases=phases, 
-            inc=inc, 
-            vsini=vsini, 
-            LLD=LLD, 
-            eqarea=use_eqarea, 
-            nlat=nlat, 
-            nlon=nlon,
-            alpha=alpha,
-            ftol=ftol
-        )
-        print(f"Running test nk={nk} vs nlatlon={nlat} {nlon}...")
-        
-        # Compute LSD mean profile
-        intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
-                                                             vsini, rv, period, timestamp, savedir, cut=cut)
+nks = [53,75,101,125,151,175,201]
+std_LPs = []
+snr_LPs = []
+for nk in nks:
+    cut = nk - 50
+    kwargs_IC14 = dict(
+        phases=phases, 
+        inc=inc, 
+        vsini=vsini, 
+        LLD=LLD, 
+        eqarea=use_eqarea, 
+        nlat=nlat, 
+        nlon=nlon,
+        alpha=alpha,
+        ftol=ftol
+    )
 
-        # Solve by IC14
-        bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    # Compute LSD mean profile
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
+                                                            vsini, rv, period, timestamp, savedir, cut=cut)
+    smoothed = savgol_filter(obskerns_norm, 31, 3)
+    resid = obskerns_norm - smoothed
+    err_pix = np.array([np.abs(resid[:,:,pix] - np.median(resid, axis=2)) for pix in range(nk)]) # error of each pixel in LP by MAD
+    err_LP = 1.4826 * np.median(err_pix, axis=0) # error of each LP (at each t and chip)
 
-        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+    signal = 1 - smoothed.min(axis=2).mean(axis=0) # signal = line depth
+    #noise = np.r_[obskerns_norm[:,:,:int(cut/2+1)], obskerns_norm[:,:,-int(cut/2+1):]].std(axis=2).mean(axis=0) # noise = std of the flat part
+    noise = err_LP.mean(axis=0) # mean error of a chip
+    snr_LPs.append(signal/noise) # S/N of LP of each chip
+    std_LPs.append(noise)
 
-    print("Run success.")
+    # Solve by IC14
+    #bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+
+    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+
+plt.figure(figsize=(5,4))
+snr_LPs = np.array(snr_LPs)
+for i in range(10):  
+    plt.plot(nks, snr_LPs[:, i], marker=".")
+plt.xlabel("nk")
+plt.ylabel("S/N of line profile")
+plt.legend(labels=[f"chip{c}" for c in goodchips[:10]], fontsize=8, bbox_to_anchor=(1,1))
+
+plt.figure(figsize=(5,4))
+snr_LPs = np.array(snr_LPs)
+for i in range(10,20):  
+    plt.plot(nks, snr_LPs[:, i], marker=".")
+plt.xlabel("nk")
+plt.ylabel("S/N of line profile")
+plt.legend(labels=[f"chip{c}" for c in goodchips[10:]], fontsize=8, bbox_to_anchor=(1,1))
+
+
+plt.figure(figsize=(5,4))
+std_LPs = np.array(std_LPs)
+for i in range(10):  
+    plt.plot(nks, std_LPs[:, i], marker=".")
+plt.xlabel("nk")
+plt.ylabel("noise level of line profile")
+plt.legend(labels=[f"chip{c}" for c in goodchips[:10]], fontsize=8, bbox_to_anchor=(1,1))
+
+plt.figure(figsize=(5,4))
+std_LPs = np.array(std_LPs)
+for i in range(10,20):  
+    plt.plot(nks, std_LPs[:, i], marker=".")
+plt.xlabel("nk")
+plt.ylabel("noise level of line profile")
+plt.legend(labels=[f"chip{c}" for c in goodchips[10:]], fontsize=8, bbox_to_anchor=(1,1))
+
+
+print("Run success.")
 

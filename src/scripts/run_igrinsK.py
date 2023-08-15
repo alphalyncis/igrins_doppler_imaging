@@ -10,8 +10,9 @@ from config_run import *
 
 savedir = "igrinsK"
 band = "K"
-goodchips_run[instru][target][band] = [1, 2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
-use_eqarea = False
+goodchips_run[instru][target][band] = [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19]
+nk = 101
+use_eqarea = True
 
 #################### Automatic ####################################
 
@@ -19,6 +20,7 @@ if True:
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
+    cut = nk - 70
 
     nobs = nobss[target]
 
@@ -108,17 +110,17 @@ for alpha in [5000]:
         ftol=ftol
     )
     
-    #bestparamgrid_r, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=True)
+    bestparamgrid_r, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
 
     LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
+#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 
-lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
+#opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
 
 print("Run success.")
 

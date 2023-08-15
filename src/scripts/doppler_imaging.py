@@ -9,6 +9,7 @@ import os
 from astropy.io import fits
 import scipy.constants as const
 from scipy import interpolate
+from scipy.signal import savgol_filter
 import paths
 
 import pymc3 as pm
@@ -229,9 +230,9 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     factor = 1e11 if "t1" in pmod else 1e5 # don't know why different model needs scaling with a factor
     pspec_cont = pspec_cont/factor
     spline = interpolate.UnivariateSpline(wspec, pspec_cont, s=0.0, k=1.0) #set up interpolation over the continuum measurement
-    plt.figure(figsize=(6,1))
-    plt.plot(wspec, pspec_cont)
-    plt.title("daospec continuum")
+    #plt.figure(figsize=(6,1))
+    #plt.plot(wspec, pspec_cont)
+    #plt.title("daospec continuum")
     #plt.show()
 
     wav_angs = np.array(wav_nm) * 10 #convert nm to angstroms
@@ -271,21 +272,24 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
-    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
-
+    if instru == "CRIRES":
+        #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
+        pass
     # plot kerns
-    plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
-    plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
+    #plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
+    #plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
 
     err_LSD_profiles = np.median(kerns.mean(1).std(0)) 
     # the error level across different obs of the chip-avged profile, median over nk pixels
+
 
     # normalize kerns
     obskerns_norm = cont_normalize_kerns(kerns, instru)
     
     # plot kerns + intrinsic_profile
     intrinsic_profiles = np.array([modkerns[:,i].mean(0) for i in range(nchip)])
-    plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.03, normed=True, intrinsic_profiles=intrinsic_profiles)
+    plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.02, normed=True, intrinsic_profiles=intrinsic_profiles)
+    plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
     
     ### Plot averaged line shapes
     plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02, cut=int(cut/2+1))
@@ -1451,7 +1455,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
         plt.subplot(1,nchip+1,i+1)
         plt.imshow(obskerns_norm[:,i]-uniform_profiles[i], 
             extent=(dv.max(), dv.min(), timestamps[-1], 0),
-            aspect=int(vsini/1e3),
+            aspect=int(0.7*vsini/1e3),
             cmap='YlOrBr') # positive diff means dark spot
         plt.xlim(dv.min()+cut, dv.max()-cut),
         plt.xlabel("velocity (km/s)")
@@ -1467,7 +1471,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.subplot(1, nchip+1,i+2)
     plt.imshow(mean_dev, 
         extent=(dv.max(), dv.min(), timestamps[-1], 0),
-        aspect=int(vsini/1e3),
+        aspect=int(0.7* vsini/1e3),
         cmap='YlOrBr') # positive diff means dark spot
     plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
