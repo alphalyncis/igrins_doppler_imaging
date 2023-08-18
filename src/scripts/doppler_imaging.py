@@ -308,7 +308,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig,
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
     observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips
 
-    bestparamgrid, cc = solve_DIME(
+    bestparamgrid, fit = solve_DIME(
         observation_norm, mean_profile,
         dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit
     )
@@ -339,9 +339,9 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig,
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
     if spotfit:
-        return bestparamgrid_r, cc
+        return bestparamgrid_r, fit
     if ret_both:
-        return bestparamgrid_r, bestparamgrid
+        return bestparamgrid_r, fit
     else:
         return bestparamgrid_r
 
@@ -454,9 +454,9 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3_loss.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # Plot the MAP map
-    map_res = starry.Map(kwargs_run['ydeg'], kwargs_run['udeg'], inc=kwargs_run['inc'])
+    map_res = starry.Map(kwargs_run['ydeg'], kwargs_run['udeg'], inc=kwargs_run['inc'], lazy=False)
     map_res[1] = kwargs_run['u1']
-    image = map_res.render(projection="moll")
+    image = map_res.render(projection="rect")
 
     with model:
         y_map = pmx.eval_in_model(y, point=map_soln)
@@ -475,7 +475,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
         xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver3.png", bbox_inches="tight", dpi=100, transparent=True)
     
-    return map_res
+    return map_res, image
 
 def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver starry_lin***")
@@ -484,6 +484,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     maps = [None for i in range(nchip)]
     images = []
+    recimages = []
     successchips = []
     for i, jj in enumerate(goodchips):
         maps[i] = starry.DopplerMap(lazy=False, wav=wav_nm[i], wav0=wav0_nm[i], **kwargs_run)
@@ -501,7 +502,9 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
                 quiet=os.getenv("CI", "false") == "true",
             )
             imag = maps[i].render(projection="moll")
+            recimag = maps[i].render(projection="rect")
             images.append(imag)
+            recimages.append(recimag)
             successchips.append(jj)
 
             print("Success!")
@@ -520,6 +523,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
 
     # plot chip-averaged map
     images = np.array(images)
+    recimages = np.array(recimages)
 
     fig, ax = plt.subplots()
     maps[0].show(ax=ax, projection="moll", image=np.mean(images, axis=0), colorbar=colorbar)
@@ -534,7 +538,7 @@ def solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwarg
         xy=(-2, -1), fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver4.png", bbox_inches="tight", dpi=100, transparent=True)
 
-    return maps
+    return np.mean(images, axis=0), np.mean(recimages, axis=0)
 
 def solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=0.05, niter=5000, annotate=False, colorbar=True):
     print("*** Using solver starry_opt ***")
@@ -1177,7 +1181,8 @@ def solve_DIME(
     allfits.append(bfit)
     bestparams = bfit[0]
     #model_observation = dime.normalize_model(np.dot(bestparams, Rmatrix), nk)
-    #metric, chisq, entropy = dime.entropy_map_norm_sp(bestparams, *fitargs, retvals=True)
+    metric, chisq, entropy = dime.entropy_map_norm_sp(bestparams, *fitargs, retvals=True)
+    print("metric:", metric, "chisq:", chisq, "entropy:", entropy)
 
     # reshape into grid
     if eqarea:
@@ -1217,7 +1222,7 @@ def solve_DIME(
         return bestparamgrid, sampler
     
     else:
-        return bestparamgrid, None
+        return bestparamgrid, bfit
 
 def get_emcee_start(bestparams, variations, nwalkers, maxchisq, args, homein=True, retchisq=False, depth=np.inf):
     """Get starting positions for EmCee walkers.

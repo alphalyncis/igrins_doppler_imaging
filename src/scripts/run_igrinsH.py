@@ -9,14 +9,14 @@ import paths
 
 from config_run import *
 
+use_eqarea = True
+
 savedir = "igrinsH"
 band = "H"
-nk = 75
-cut = nk - 70
-nlat, nlon = 9, 18
-LLD = 0.7
-u1 = LLD
+nk = 151
 alpha = 5000
+goodchips_run[instru][target][band] = [0,1,2,3,4,5,16,17,18,19]
+modelspec = "t1400g1000f8"
 
 #################### Automatic ####################################
 
@@ -24,8 +24,8 @@ if True:
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
-    if map_type == "eqarea":
-        use_eqarea = True
+
+    cut = nk - 70
 
     nobs = nobss[target]
 
@@ -100,8 +100,9 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
-
-for alpha in [5000]:
+alphas = [0, 1000, 2500, 5000]
+Q = []
+for alpha in alphas:
     kwargs_IC14 = dict(
         phases=phases, 
         inc=inc, 
@@ -115,17 +116,23 @@ for alpha in [5000]:
     )
     
     # Solve by 5 solvers
-    #bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    bestparamgrid_r, fit = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    Q.append(fit[1])
 
-    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
+#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 
-lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+#lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 #plt.figure(figsize=(5,3))
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
+#opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
+
+plt.figure(figsize=(5,3))
+plt.plot(alphas, Q, marker=".")
+plt.xlabel("alpha")
+plt.ylabel("Q = chi^2 - alpha * S")
 
 print("Run success.")
 
