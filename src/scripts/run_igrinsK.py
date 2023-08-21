@@ -12,6 +12,7 @@ savedir = "igrinsK"
 band = "K"
 goodchips_run[instru][target][band] = [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19]
 nk = 101
+nlat, nlon = 12,24
 use_eqarea = True
 
 #################### Automatic ####################################
@@ -110,9 +111,21 @@ for alpha in [5000]:
         ftol=ftol
     )
     
-    bestparamgrid_r, cc = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
+    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
 
-    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+obs=np.reshape(res['sc_observation_1d'], (nobs, nk))
+model=np.reshape(res['model_observation'], (nobs, nk))
+flmodel = np.reshape(res['flatmodel'], (nobs, nk))
+
+plt.figure(figsize=(5, 7))
+cut = int(cut/2)
+for i in range(nobs):
+    plt.plot(res['dv'][cut:-cut], obs[i][cut:-cut] - 0.02*i, color='k', linewidth=1)
+    #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
+    plt.plot(res['dv'][cut:-cut], model[i][cut:-cut] - 0.02*i, color='r', linewidth=1)
+    plt.plot(res['dv'][cut:-cut], flmodel[i][cut:-cut] - 0.02*i, '--', color='gray', linewidth=1)
+plt.legend(labels=['obs', 'best-fit map', 'flat map'])
+#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 

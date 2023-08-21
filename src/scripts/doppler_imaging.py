@@ -273,9 +273,8 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
-    if instru == "CRIRES":
-        #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
-        pass
+    modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
+    
     # plot kerns
     #plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
     #plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
@@ -288,9 +287,9 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     obskerns_norm = cont_normalize_kerns(kerns, instru)
     
     # plot kerns + intrinsic_profile
+    plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
     intrinsic_profiles = np.array([modkerns[:,i].mean(0) for i in range(nchip)])
     plot_kerns_timeseries(obskerns_norm, goodchips, dv, gap=0.02, normed=True, intrinsic_profiles=intrinsic_profiles)
-    plot_kerns_timeseries(modkerns, goodchips, dv, gap=0.1)
     
     ### Plot averaged line shapes
     plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02, cut=int(cut/2+1))
@@ -300,14 +299,16 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
 
     return intrinsic_profiles, obskerns_norm
 
-def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
-                  ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False):
+def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=5,
+                  ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False,
+                  create_obs_from_diff=True):
     print("*** Using solver IC14new ***")
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
 
     bestparamgrid, fit = solve_DIME(
         obskerns_norm, intrinsic_profiles,
-        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit
+        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit,
+        create_obs_from_diff=create_obs_from_diff
     )
 
     bestparamgrid_r = np.roll(
@@ -321,7 +322,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig,
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
-        plot_IC14_map(bestparamgrid_r) # derotated
+        plot_IC14_map(bestparamgrid_r, clevel=clevel) # derotated
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
@@ -1009,7 +1010,8 @@ def solve_DIME(
         alpha: int = 4500, ftol: float = 0.01,
         plot_cells: bool = False,
         plot_unstretched_map: bool = False,
-        spotfit: bool = False
+        spotfit: bool = False,
+        create_obs_from_diff: bool = True
 ) -> np.ndarray:
     """
     Copied from IC14orig except kerns used to compute weights should take 
@@ -1048,7 +1050,8 @@ def solve_DIME(
     """
     # Can safely take means over chips now
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
-    observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips and ravel to 1d
+    observation_2d = np.median(obskerns_norm, axis=1)
+    observation_1d = observation_2d.ravel() # mean over chips and ravel to 1d
 
     # calc error for each obs
     smoothed = savgol_filter(obskerns_norm, 31, 3)
@@ -1076,7 +1079,7 @@ def solve_DIME(
         plot_map_cells(mmap)
     ncell = mmap.ncell
     nx = ncell
-    dime.setup(observation_norm.size, nk)
+    dime.setup(observation_1d.size, nk)
     flatguess = 100*np.ones(nx)
     bounds = [(1e-6, 300)]*nx
     allfits = []
@@ -1098,22 +1101,35 @@ def solve_DIME(
         Rmatrix[:,dv.size*kk:dv.size*(kk+1)] = Rblock
 
     flatmodel = dime.normalize_model(np.dot(flatguess, Rmatrix), nk)
+    flatmodel_2d = np.reshape(flatmodel, (nobs, nk))
+
+    # create diff+flat profile
+    nchip = obskerns_norm.shape[1]
+    uniform_profiles = np.zeros((nchip, nk))
+    for c in range(nchip):
+        uniform_profiles[c] = obskerns_norm[:,c].mean(axis=0) # time-avged LP for each chip
+    mean_dev = np.median(np.array([obskerns_norm[:,c]-uniform_profiles[c] for c in range(nchip)]), axis=0) # mean over chips
+    new_observation_2d = mean_dev + flatmodel_2d
+    new_observation_1d = new_observation_2d.ravel()
 
     if len(allfits)==0:  # Properly scale measurement weights:
         #minfm = flatmodel.min()
         #cutoffval = 1. - (1. - minfm) / 22.
 
         # Mask out non-surface velocity space with weight=0
-        width = int(vsini/1e3/np.abs(np.diff(dv).mean())) + 3 # vsini edge plus uncert=3
+        width = int(vsini/1e3/np.abs(np.diff(dv).mean())) + 15 # vsini edge plus uncert=3
         central_indices = np.arange(nobs) * nk + int(nk/2)
-        mask = np.zeros_like(observation_norm, dtype=bool)
+        mask = np.zeros_like(observation_1d, dtype=bool)
         for central_idx in central_indices:
             mask[central_idx - width:central_idx + width + 1] = True
         w_observation = (mask == True).astype(float) / err_observation_norm**2
 
+        if create_obs_from_diff:
+            observation_1d = new_observation_1d
+
         # Scale the observations to match the model's equivalent width:
-        out, eout = an.lsq((observation_norm, np.ones(nobs*nk)), flatmodel, w=w_observation)
-        sc_observation_norm = observation_norm * out[0] + out[1]
+        out, eout = an.lsq((observation_1d, np.ones(nobs*nk)), flatmodel, w=w_observation)
+        sc_observation_1d = observation_1d * out[0] + out[1]
 
         # perfect fit is when alpha=0 i.e. no smoothing
         #fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
@@ -1194,7 +1210,7 @@ def solve_DIME(
         plt.imshow(spotmap, origin="lower", extent=(0, 360, -90, 90))
         
     ### Solve!
-    fitargs = (sc_observation_norm, w_observation, Rmatrix, alpha)
+    fitargs = (sc_observation_1d, w_observation, Rmatrix, alpha)
     bfit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
     allfits.append(bfit)
     bestparams = bfit[0]
@@ -1242,7 +1258,7 @@ def solve_DIME(
         Q=metric, chisq=chisq, entropy=entropy,
         Rmatrix=Rmatrix,
         model_observation=model_observation,
-        sc_observation_norm=sc_observation_norm,
+        sc_observation_1d=sc_observation_1d,
         w_observation=w_observation,
         flatmodel=flatmodel,
         mmap=mmap, dv=dv, dbeta=dbeta
@@ -1422,7 +1438,8 @@ def shift_kerns_to_center(modkerns, kerns, goodchips, dv, sim=False):
             systematic_rv_offset = (modkerns[k,i]==modkerns[k,i].max()).nonzero()[0][0] - (dv==0).nonzero()[0][0] # find the rv offset
             print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
             cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
-            if not sim: # shift kerns with same amount if not simulation
+            #if not sim: # shift kerns with same amount if not simulation
+            if False: # don't shift kerns
                 cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
             else: # don't shift if simulation
                 cen_kerns[k,i] = kerns[k,i]
@@ -1534,7 +1551,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
 
-def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5):
+def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     '''Plot doppler map from an array.'''
     nlat, nlon = bestparamgrid.shape 
     fig = plt.figure(figsize=(7,3))
@@ -1543,7 +1560,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5):
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
     Lon,Lat = np.meshgrid(lon,lat)
     im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
-    contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, 1.), clevel, colors='white', linewidths=0.5)
+    contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
         fig.colorbar(im)
     ax.set_yticks(np.linspace(-np.pi/2, np.pi/2, 7), labels=[])
