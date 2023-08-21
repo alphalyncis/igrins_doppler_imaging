@@ -12,11 +12,11 @@ savedir = "crires"
 instru = "CRIRES"
 band = "K"
 LLD = 0.7
-nlat, nlon = 20, 40
+nlat, nlon = 12,24
 nk = 125
 alpha = 10000
 rvs[target] = 9e-5
-incs[target] = 70
+incs[target] = 80
 
 use_eqarea = True
 
@@ -99,27 +99,26 @@ print(f"Using real observation {model_datafile}")
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Compute LSD mean profile
-nks = [75,101,125,151,175,201,251]
-std_LPs = []
-snr_LPs = []
-for nk in nks:
-    cut = nk - 70
-    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
-                                                        period, timestamps[target], savedir, cut=cut)
-    smoothed = savgol_filter(obskerns_norm, 31, 3)
-    resid = obskerns_norm - smoothed
-    err_pix = np.array([np.abs(resid[:,:,pix] - np.median(resid, axis=2)) for pix in range(nk)]) # error of each pixel in LP by MAD
-    err_LP = 1.4826 * np.median(err_pix, axis=0) # error of each LP (at each t and chip)
 
-    signal = 1 - smoothed.min(axis=2).mean(axis=0) # signal = line depth
-    #noise = np.r_[obskerns_norm[:,:,:int(cut/2+1)], obskerns_norm[:,:,-int(cut/2+1):]].std(axis=2).mean(axis=0) # noise = std of the flat part
-    noise = err_LP.mean(axis=0) # mean error of a chip
-    snr_LPs.append(signal/noise) # S/N of LP of each chip
-    std_LPs.append(noise)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, 
+                                                     nk, vsini, rv, period, timestamps[target], savedir, cut=cut)
+
 
 # Solve by 5 solvers
-#bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-#plot_IC14_map(bestparamgrid)
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
+plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)))
+
+obs=np.reshape(res['sc_observation_norm'], (nobs, nk))
+model=np.reshape(res['model_observation'], (nobs, nk))
+flmodel = np.reshape(res['flatmodel'], (nobs, nk))
+
+plt.figure(figsize=(5, 7))
+for i in range(nobs):
+    plt.plot(res['dv'], obs[i] - 0.02*i, color='k', linewidth=1)
+    #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
+    plt.plot(res['dv'], model[i] - 0.02*i, color='r', linewidth=1)
+    plt.plot(res['dv'], flmodel[i] - 0.02*i, '--', color='gray', linewidth=1)
+plt.legend(labels=['obs', 'best-fit map', 'flat map'])
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
@@ -131,20 +130,6 @@ for nk in nks:
 
 #opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
 
-plt.figure(figsize=(5,3))
-snr_LPs = np.array(snr_LPs)
-for i in range(nchip):  
-    plt.plot(nks, snr_LPs[:, i], marker=".")
-plt.xlabel("nk")
-plt.ylabel("S/N of line profile")
-plt.legend(labels=["chip1", "chip2", "chip3", "chip4"])
-
-plt.figure(figsize=(5,3))
-std_LPs = np.array(std_LPs)
-for i in range(nchip):  
-    plt.plot(nks, std_LPs[:, i], marker=".")
-plt.xlabel("nk")
-plt.ylabel("noise level of line profile")
-plt.legend(labels=["chip1", "chip2", "chip3", "chip4"])
-
 print("Run success.")
+
+#dbeta = 5.04270500288737e-06

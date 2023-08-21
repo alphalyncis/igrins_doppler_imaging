@@ -10,6 +10,7 @@ from astropy.io import fits
 import scipy.constants as const
 from scipy import interpolate
 from scipy.signal import savgol_filter
+from scipy.ndimage.filters import gaussian_filter
 import paths
 
 import pymc3 as pm
@@ -302,14 +303,10 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
 def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
                   ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False):
     print("*** Using solver IC14new ***")
-    # Can safely take means over chips now
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
 
-    mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
-    observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips
-
     bestparamgrid, fit = solve_DIME(
-        observation_norm, mean_profile,
+        obskerns_norm, intrinsic_profiles,
         dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit
     )
 
@@ -1001,8 +998,8 @@ def plot_map_cells(map_obj):
     ax.set_xticklabels([30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330], fontsize=8)
 
 def solve_DIME(
-        observation_norm: np.ndarray, 
-        mean_profile: np.ndarray,
+        obskerns_norm: np.ndarray, 
+        intrinsic_profiles: np.ndarray,
         dbeta: float, 
         nk: int, nobs: int, 
         phases: np.ndarray, 
@@ -1021,11 +1018,11 @@ def solve_DIME(
 
     Parameters
     ----------
-    observation_norm : 1darray, shape=(nk*nobs)
-        The raveled observed line profiles (kerns).
+    obskerns_norm : 3darray, shape=(nobs, nchip, nk)
+        The observed line profiles (kerns).
 
-    mean_profiles : 1darray, shape=(nk)
-        The chip-averaged model line profile (modekerns).
+    intrinsic_profiles : 2darray, shape=(nchip, nk)
+        The model line profiles (modekerns).
 
     dbeta: float
         d_lam/lam_ref of the wavelength range that the line profile sits on.
@@ -1049,6 +1046,18 @@ def solve_DIME(
         Cells corresponding to longitude 0~2*pi, latitude 0~pi.
 
     """
+    # Can safely take means over chips now
+    mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
+    observation_norm = np.median(obskerns_norm, axis=1).ravel() # mean over chips and ravel to 1d
+
+    # calc error for each obs
+    smoothed = savgol_filter(obskerns_norm, 31, 3)
+    resid = obskerns_norm - smoothed
+    err_pix = np.array([np.abs(resid[:,:,pix] - np.median(resid, axis=2)) for pix in range(nk)]) # error of each pixel in LP by MAD
+    err_LP = 1.4826 * np.median(err_pix, axis=0) # error of each LP (at each t and chip)
+    err_each_obs = err_LP.mean(axis=1)
+    err_observation_norm = np.tile(err_each_obs[:, np.newaxis], (1,nk)).ravel() # look like a step function over different times
+
     ### Prepare data for DIME
     modIP = 1. - np.concatenate((np.zeros(300), mean_profile, np.zeros(300)))
     modDV = - np.arange(np.floor(-modIP.size/2.+.5), np.floor(modIP.size/2.+.5)) * dbeta * const.c / 1e3
@@ -1091,18 +1100,27 @@ def solve_DIME(
     flatmodel = dime.normalize_model(np.dot(flatguess, Rmatrix), nk)
 
     if len(allfits)==0:  # Properly scale measurement weights:
-        minfm = flatmodel.min()
-        cutoffval = 1. - (1. - minfm) / 22.
-        w_observation = (flatmodel < cutoffval).astype(float) / err_LSD_profiles**2
+        #minfm = flatmodel.min()
+        #cutoffval = 1. - (1. - minfm) / 22.
+
+        # Mask out non-surface velocity space with weight=0
+        width = int(vsini/1e3/np.abs(np.diff(dv).mean())) + 3 # vsini edge plus uncert=3
+        central_indices = np.arange(nobs) * nk + int(nk/2)
+        mask = np.zeros_like(observation_norm, dtype=bool)
+        for central_idx in central_indices:
+            mask[central_idx - width:central_idx + width + 1] = True
+        w_observation = (mask == True).astype(float) / err_observation_norm**2
+
         # Scale the observations to match the model's equivalent width:
         out, eout = an.lsq((observation_norm, np.ones(nobs*nk)), flatmodel, w=w_observation)
         sc_observation_norm = observation_norm * out[0] + out[1]
-        fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
-        perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, maxiter=1e4, bounds=bounds)
+
+        # perfect fit is when alpha=0 i.e. no smoothing
+        #fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
+        #perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, maxiter=1e4, bounds=bounds)
         # the metric to be minimized is (0.5*chisq - alpha*entropy)
-        
-        perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
-        w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
+        #perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
+        #w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
 
     if spotfit and not eqarea:
         print("Running MCMC spot fitting...")
@@ -1180,7 +1198,7 @@ def solve_DIME(
     bfit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, disp=1, maxiter=1e4, bounds=bounds)
     allfits.append(bfit)
     bestparams = bfit[0]
-    #model_observation = dime.normalize_model(np.dot(bestparams, Rmatrix), nk)
+    model_observation = dime.normalize_model(np.dot(bestparams, Rmatrix), nk)
     metric, chisq, entropy = dime.entropy_map_norm_sp(bestparams, *fitargs, retvals=True)
     print("metric:", metric, "chisq:", chisq, "entropy:", entropy)
 
@@ -1218,11 +1236,24 @@ def solve_DIME(
     else:
         bestparamgrid = np.reshape(bestparams, (-1, nlon))
 
+    res = dict(
+        bestparams=bestparams,
+        bestparamgrid=bestparamgrid, 
+        Q=metric, chisq=chisq, entropy=entropy,
+        Rmatrix=Rmatrix,
+        model_observation=model_observation,
+        sc_observation_norm=sc_observation_norm,
+        w_observation=w_observation,
+        flatmodel=flatmodel,
+        mmap=mmap, dv=dv, dbeta=dbeta
+    )
+        
+
     if spotfit:
         return bestparamgrid, sampler
     
     else:
-        return bestparamgrid, bfit
+        return bestparamgrid, res
 
 def get_emcee_start(bestparams, variations, nwalkers, maxchisq, args, homein=True, retchisq=False, depth=np.inf):
     """Get starting positions for EmCee walkers.
@@ -1503,7 +1534,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
 
-def plot_IC14_map(bestparamgrid, colorbar=False):
+def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5):
     '''Plot doppler map from an array.'''
     nlat, nlon = bestparamgrid.shape 
     fig = plt.figure(figsize=(7,3))
@@ -1512,6 +1543,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False):
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
     Lon,Lat = np.meshgrid(lon,lat)
     im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
+    contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, 1.), clevel, colors='white', linewidths=0.5)
     if colorbar:
         fig.colorbar(im)
     ax.set_yticks(np.linspace(-np.pi/2, np.pi/2, 7), labels=[])
@@ -1565,3 +1597,22 @@ def test_obs():
 if __name__ == "__main__":
     pass
     #test_obs()
+
+'''
+indices = np.arange(1, observation_norm.size, 5)
+new_obs = np.delete(observation_norm, indices)
+indices_p = np.arange(1, mean_profile.size, 5)
+new_profile = np.delete(mean_profile, indices_p)
+
+obs=np.reshape(res['sc_observation_norm'], (nobs, nk))
+model=np.reshape(res['model_observation'], (nobs, nk))
+flmodel = np.reshape(flatmodel, (nobs, nk))
+
+plt.figure(figsize=(5, 7))
+for i in range(nobs):
+    plt.plot(obs[i] - 0.02*i, color='k', linewidth=1)
+    #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
+    plt.plot(model[i] - 0.02*i, color='r', linewidth=1)
+    plt.plot(flmodel[i] - 0.02*i, '--', color='gray', linewidth=1)
+plt.legend(labels=['obs', 'best-fit map', 'flat map'])
+'''
