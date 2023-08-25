@@ -273,7 +273,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
-    modkerns, kerns = shift_kerns_to_center(modkerns, kerns, goodchips, dv)
+    modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
     
     # plot kerns
     #plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
@@ -299,13 +299,13 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
 
     return intrinsic_profiles, obskerns_norm
 
-def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=5,
+def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=7,
                   ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False,
                   create_obs_from_diff=True):
     print("*** Using solver IC14new ***")
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
 
-    bestparamgrid, fit = solve_DIME(
+    bestparamgrid, res = solve_DIME(
         obskerns_norm, intrinsic_profiles,
         dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit,
         create_obs_from_diff=create_obs_from_diff
@@ -322,7 +322,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
-        plot_IC14_map(bestparamgrid_r, clevel=clevel) # derotated
+        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2.) # derotated
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
@@ -336,10 +336,22 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         fontsize=8)
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
-    if spotfit:
-        return bestparamgrid_r, fit
+    # Plot fit result
+    obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
+    bestmodel_2d = np.reshape(res['model_observation'], (nobs, nk))
+    flatmodel_2d = np.reshape(res['flatmodel'], (nobs, nk))
+
+    plt.figure(figsize=(5, 7))
+    for i in range(nobs):
+        plt.plot(res['dv'], obs_2d[i] - 0.02*i, color='k', linewidth=1)
+        #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
+        plt.plot(res['dv'], bestmodel_2d[i] - 0.02*i, color='r', linewidth=1)
+        plt.plot(res['dv'], flatmodel_2d[i] - 0.02*i, '--', color='gray', linewidth=1)
+    plt.legend(labels=['obs', 'best-fit map', 'flat map'])
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1_ts.png", bbox_inches="tight", dpi=100, transparent=True)
+
     if ret_both:
-        return bestparamgrid_r, fit
+        return bestparamgrid_r, res
     else:
         return bestparamgrid_r
 
@@ -1064,7 +1076,7 @@ def solve_DIME(
     ### Prepare data for DIME
     modIP = 1. - np.concatenate((np.zeros(300), mean_profile, np.zeros(300)))
     modDV = - np.arange(np.floor(-modIP.size/2.+.5), np.floor(modIP.size/2.+.5)) * dbeta * const.c / 1e3
-    flineSpline2 = interpolate.UnivariateSpline(modDV[::-1], modIP[::-1], k=1., s=0.)
+    flineSpline = interpolate.UnivariateSpline(modDV[::-1], modIP[::-1], k=1., s=0.)
     dv = -dbeta * np.arange(np.floor(-nk/2.+.5), np.floor(nk/2.+.5)) * const.c / 1e3 # km/s
 
     ### Reconstruct map
@@ -1095,7 +1107,7 @@ def solve_DIME(
         this_doppler = 1. + vsini*this_map.visible_rvcorners.mean(1)/const.c/np.cos(inc_) # mean rv of each cell in m/s
         good = (this_map.projected_area>0) * np.isfinite(this_doppler)
         for ii in good.nonzero()[0]:
-            speccube[ii,:] = flineSpline2(dv + (this_doppler[ii]-1)*const.c/1000.)
+            speccube[ii,:] = flineSpline(dv + (this_doppler[ii]-1)*const.c/1000.)
         limbdarkening = (1. - LLD) + LLD * this_map.mu
         Rblock = speccube * ((limbdarkening*this_map.projected_area).reshape(this_map.ncell, 1)*np.pi/this_map.projected_area.sum())
         Rmatrix[:,dv.size*kk:dv.size*(kk+1)] = Rblock
@@ -1138,6 +1150,7 @@ def solve_DIME(
         #perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
         #w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
 
+    cc = None
     if spotfit and not eqarea:
         print("Running MCMC spot fitting...")
         nstep = 2500
@@ -1147,7 +1160,7 @@ def solve_DIME(
         limits = [[99.99, 100.01], [0, 200],        [-90, 90],   [0, 360],     [10, 50]] # uniform prior
         #limits = [[100, 0.001],    [90, 20],        [30, 20],    [180, 100],   [30, 20]]
         spotargs0 = (mmap.corners_latlon.mean(2)[:,1].reshape(nlat, nlon), mmap.corners_latlon.mean(2)[:,0].reshape(nlat, nlon) - np.pi/2., Rmatrix)
-        spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits))
+        spotargs = (dime.profile_spotmap,)+spotargs0 + (sc_observation_1d, w_observation, dict(uniformprior=limits))
         thisfit = an.fmin(an.errfunc, guess, args=spotargs, full_output=True)
         test = dime.profile_spotmap(guess, *spotargs0)
         
@@ -1261,15 +1274,12 @@ def solve_DIME(
         sc_observation_1d=sc_observation_1d,
         w_observation=w_observation,
         flatmodel=flatmodel,
-        mmap=mmap, dv=dv, dbeta=dbeta
+        flineSpline=flineSpline,
+        mmap=mmap, dv=dv, dbeta=dbeta,
+        cc=cc
     )
         
-
-    if spotfit:
-        return bestparamgrid, sampler
-    
-    else:
-        return bestparamgrid, res
+    return bestparamgrid, res
 
 def get_emcee_start(bestparams, variations, nwalkers, maxchisq, args, homein=True, retchisq=False, depth=np.inf):
     """Get starting positions for EmCee walkers.
@@ -1428,7 +1438,7 @@ def remove_spike(data, kern_size=10, lim_denom=5):
             data_filt[i] = np.median(seg[int(kern_size/5):-int(kern_size/5)])
     return data_filt
 
-def shift_kerns_to_center(modkerns, kerns, goodchips, dv, sim=False):
+def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False):
     '''shift modkerns to center at dv=0 and shift kerns for same amount.'''
     nobs, nchip, nk = modkerns.shape
     cen_modkerns = np.zeros_like(modkerns)
@@ -1438,11 +1448,10 @@ def shift_kerns_to_center(modkerns, kerns, goodchips, dv, sim=False):
             systematic_rv_offset = (modkerns[k,i]==modkerns[k,i].max()).nonzero()[0][0] - (dv==0).nonzero()[0][0] # find the rv offset
             print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
             cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
-            #if not sim: # shift kerns with same amount if not simulation
-            if False: # don't shift kerns
-                cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
-            else: # don't shift if simulation
-                cen_kerns[k,i] = kerns[k,i]
+            cen_kerns[k,i] = kerns[k,i]
+            if not sim: # shift kerns with same amount if not simulation
+                if instru != 'CRIRES': # don't shift kerns
+                    cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
     return cen_modkerns, cen_kerns
 
 def cont_normalize_kerns(cen_kerns, instru):

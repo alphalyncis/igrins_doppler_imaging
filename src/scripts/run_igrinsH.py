@@ -13,10 +13,12 @@ use_eqarea = True
 
 savedir = "igrinsH"
 band = "H"
-nk = 151
+nk = 155
 alpha = 5000
 goodchips_run[instru][target][band] = [0,1,2,3,4,5,16,17,18,19]
 modelspec = "t1400g1000f8"
+nlat, nlon = 20, 40
+
 
 #################### Automatic ####################################
 
@@ -100,7 +102,7 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
-alphas = [0, 1000, 2500, 5000]
+alphas = [0, 100, 1000]
 Q = []
 for alpha in alphas:
     kwargs_IC14 = dict(
@@ -115,9 +117,11 @@ for alpha in alphas:
         ftol=ftol
     )
     
-    # Solve by 5 solvers
-    bestparamgrid_r, fit = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
-    Q.append(fit[1])
+    # solve by solvers
+
+    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    Q.append(res['Q'])
+
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 

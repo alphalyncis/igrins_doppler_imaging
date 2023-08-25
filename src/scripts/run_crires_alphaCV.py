@@ -12,7 +12,7 @@ savedir = "crires"
 instru = "CRIRES"
 band = "K"
 LLD = 0.7
-nlat, nlon = 12,24
+nlat, nlon = 20, 40
 nk = 125
 alpha = 10000
 rvs[target] = 9e-5
@@ -108,17 +108,6 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
 bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
 plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)))
 
-obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
-bestmodel_2d = np.reshape(res['model_observation'], (nobs, nk))
-flatmodel_2d = np.reshape(res['flatmodel'], (nobs, nk))
-
-plt.figure(figsize=(5, 7))
-for i in range(nobs):
-    plt.plot(res['dv'], obs_2d[i] - 0.02*i, color='k', linewidth=1)
-    #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
-    plt.plot(res['dv'], bestmodel_2d[i] - 0.02*i, color='r', linewidth=1)
-    plt.plot(res['dv'], flatmodel_2d[i] - 0.02*i, '--', color='gray', linewidth=1)
-plt.legend(labels=['obs', 'best-fit map', 'flat map'])
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
