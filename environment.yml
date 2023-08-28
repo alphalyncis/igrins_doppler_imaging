@@ -15,4 +15,5 @@ dependencies:
       - starry-process==0.9.8
       - starry==1.2.0
       - emcee==3.1.0
-      - corner
+      - corner==2.2.2
+      - cartopy==0.22.0

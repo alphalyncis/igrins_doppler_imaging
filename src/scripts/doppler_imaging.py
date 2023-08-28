@@ -23,6 +23,8 @@ import emcee
 import analysis3 as an # for an.lsq and an.gfit
 import ELL_map_class as ELL_map
 import dime3 as dime # Doppler Imaging & Maximum Entropy, needed for various funcs
+import cartopy.crs as ccrs
+from PIL import Image
 
 #TODO: target should name as -> target+night, since can have several nights for one target 
 #TODO: run bands separately or together
@@ -300,14 +302,14 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     return intrinsic_profiles, obskerns_norm
 
 def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=7,
-                  ret_both=True, annotate=False, colorbar=False, plot_starry=False, spotfit=False,
-                  create_obs_from_diff=True):
+                  ret_both=True, annotate=False, colorbar=False, plot_cells=False, plot_starry=False, 
+                  spotfit=False, create_obs_from_diff=True):
     print("*** Using solver IC14new ***")
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
 
     bestparamgrid, res = solve_DIME(
         obskerns_norm, intrinsic_profiles,
-        dbeta, nk, nobs, **kwargs_IC14, plot_cells=True, spotfit=spotfit,
+        dbeta, nk, nobs, **kwargs_IC14, plot_cells=plot_cells, spotfit=spotfit,
         create_obs_from_diff=create_obs_from_diff
     )
 
@@ -322,7 +324,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
-        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2.) # derotated
+        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2.) # smoothed contour lines
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
@@ -990,7 +992,7 @@ def plot_timeseries(map, modelspec, theta, obsflux=None, overlap=8.0, figsize=(5
     ax_f[0].set_ylim(-fac, fac)
  
 def plot_map_cells(map_obj):
-    fig = plt.figure(figsize=(12, 10))
+    fig = plt.figure(figsize=(6,5))
     ax = fig.add_subplot(111, projection="mollweide")
     ax.grid(True)
     good = (map_obj.projected_area>0)
@@ -1005,7 +1007,7 @@ def plot_map_cells(map_obj):
             poly = plt.Polygon(np.column_stack((x, y)), facecolor='gray', edgecolor='black')
             ax.add_patch(poly)
             ax.text(x.mean(), y.mean(), f"{k}", size=5)
-        ax.text(x.mean()-0.1, y.mean()-0.07, f"a:{map_obj.projected_area[k]:.3f}", size=3)
+        #ax.text(x.mean()-0.1, y.mean()-0.07, f"a:{map_obj.projected_area[k]:.3f}", size=3)
 
     # Set plot parameters
     ax.set_xticklabels([30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330], fontsize=8)
@@ -1450,8 +1452,9 @@ def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False):
             cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
             cen_kerns[k,i] = kerns[k,i]
             if not sim: # shift kerns with same amount if not simulation
-                if instru != 'CRIRES': # don't shift kerns
-                    cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
+                if instru != 'CRIRES': # don't shift kerns if crires
+                    pass
+                    #cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
     return cen_modkerns, cen_kerns
 
 def cont_normalize_kerns(cen_kerns, instru):
@@ -1578,6 +1581,62 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     for item in ax.spines.values():
         item.set_linewidth(1.2)
 
+def make_gif_map(bestparamgrid, inc, period, savedir, step=15, fps=4):
+    fig = plt.figure(figsize=(10,5))
+    y, x = bestparamgrid.shape
+
+    # create an interpolation smoothed map
+    plt.imshow(bestparamgrid, interpolation='bicubic', cmap='gray', aspect=x/y*0.5)
+    plt.axis('off')
+    fig.patch.set_visible(False)
+    plt.savefig(paths.figures / f"{savedir}/solver1_map.png", bbox_inches='tight', dpi=200, pad_inches=0)
+    img = Image.open(paths.figures / f"{savedir}/solver1_map.png")
+    img = np.array(img.convert('L'), dtype='float64')
+    img /= img.max()
+
+    # make GIF with PIL
+    Nlat, Nlon = img.shape
+    Lon, Lat = np.meshgrid(np.linspace(-180, 180, Nlon), np.linspace(-90, 90, Nlat))
+
+    from matplotlib.animation import FuncAnimation
+    num_frames = int(360/step)
+    fig = plt.figure(figsize=(4, 4))
+    ax = plt.axes(projection=ccrs.Orthographic(0, 10))
+    time_text = ax.text(0.85, 0.05,'', transform=ax.transAxes)
+    def update(frame):
+        ax = plt.axes(projection=ccrs.Orthographic(frame*step, 90-inc))
+        gl = ax.gridlines(xlocs=range(-180, 180, 30), ylocs=range(-90, 90, 30), color='gray', linewidth=0.3)
+        im = ax.imshow(img, origin="lower", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree(), cmap=plt.cm.plasma, vmin=0, vmax=1)
+        time_text.set_text(f'{frame*period/num_frames+0.2:.1f}h')
+        for item in ax.spines.values():
+            item.set_linewidth(1.5)
+        return (ax, gl, im, time_text)
+
+    # Create the animation
+    ani = FuncAnimation(plt.gcf(), update, frames=num_frames)
+
+    # Save the animation as a GIF
+    output_gif_path = paths.figures / f"{savedir}/solver1_map.gif"
+    ani.save(output_gif_path, dpi=100, fps=fps)
+    '''
+    frames = []
+    for view in range(0, 360, step):
+        fig = plt.figure(figsize=(4, 4))
+        ax = plt.axes(projection=ccrs.Orthographic(view, 90-inc))
+        for item in ax.spines.values():
+            item.set_linewidth(1.5)
+        gl = ax.gridlines(xlocs=range(-180,180,30), ylocs=range(-90,90,30), color='gray', linewidth=0.3)
+        ax.imshow(img, origin="lower", extent=(-180, 180, -90, 90),transform=ccrs.PlateCarree(), cmap=plt.cm.plasma, vmin=0, vmax=1)  # Important
+
+        # save fig in bytes format
+        temp = paths.figures / f'temp/frame_{view}.png'
+        plt.savefig(temp, format='png', dpi=150, bbox_inches='tight', transparent=True)
+        #frames.append(imageio.imread(temp))
+        frames.append(Image.open(temp))
+
+    gif_file = paths.figures / f"{savedir}/solver1_map.gif"
+    frames[0].save(gif_file, format='GIF', append_images=frames[1:], save_all=True, duration=duration, loop=0)
+    '''
 
 ################################################################################
 ####################   Tests    ################################################

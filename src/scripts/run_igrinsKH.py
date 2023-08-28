@@ -10,9 +10,9 @@ from config_run import *
 
 savedir = "igrinsHK"
 band = "both"
-nk = 75
+nk = 155
 cut = nk - 70
-nlat, nlon = 9, 18
+nlat, nlon = 20, 40
 LLD = 0.7
 u1 = LLD
 
@@ -145,17 +145,18 @@ for alpha in [5000]:
     )
     
     # Solve by 5 solvers
-    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
-
+    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
+                                                   annotate=False, colorbar=False, spotfit=False)
+    make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
     #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-    LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=False, colorbar=False)
+    #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=False, colorbar=False)
 
     #lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
     #plt.figure(figsize=(5,3))
     #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
-    opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
+    #opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
 
     print("Run success.")
 
