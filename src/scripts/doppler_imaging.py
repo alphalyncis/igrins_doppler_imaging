@@ -275,7 +275,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
-    modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
+    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
     
     # plot kerns
     #plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
