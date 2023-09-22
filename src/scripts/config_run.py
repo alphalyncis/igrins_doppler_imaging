@@ -94,16 +94,16 @@ modelspec = "t1500g1000f8"
 LSD = "new"
 
 ########## IC14 parameters ##########
-nk = 75
+nk = 155
 cut = nk - 70
 LLD = 0.7
 alpha = 5000
 ftol = 0.01 # tolerance for convergence of maximum-entropy
 nstep = 2000
-nlat, nlon = 9, 18
+nlat, nlon = 10, 20
 
 ########## Starry parameters ##########
-ydeg_sim = 15
+ydeg_sim = 16
 ydeg = 8
 udeg = 1
 nc = 1

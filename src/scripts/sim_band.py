@@ -8,10 +8,11 @@ import paths
 from config_sim import *
 modelmap = "1band"
 savedir = "sim_band"
-nk = 75
+nk = 155
 cut = nk - 70
-nlat, nlon = 9, 18
-contrast = 0.7
+nlat, nlon = 10, 20
+alpha = 2000
+contrast = 0.8
 noisetype = "random"
 
 #################### Automatic ####################################
@@ -101,7 +102,6 @@ if True:
         savedir=savedir
     )
 
-
 ##############################################################################
 ####################      Run!      ##########################################
 ##############################################################################
@@ -111,21 +111,20 @@ assert simulation_on == True
 # Load data from fit pickle
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
-bestparamgrid_rs = np.array([None, None, None])
-for i in range(3):  
-    # Make mock observed spectra
-    observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, savedir, plot_ts=True, colorbar=False)
+#bestparamgrid_rs = np.array([None, None, None])
 
-    # Compute LSD mean profile
-    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
-                                                        vsini, rv, period, timestamp, savedir, cut=cut)
+# Make mock observed spectra
+observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, savedir, plot_ts=True, colorbar=False)
 
-    bestparamgrid_rs[i], bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+# Compute LSD mean profile
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
+                                                     period, timestamp, savedir, cut=cut)
 
-bestparamgrid_r = np.mean(bestparamgrid_rs, axis=0)
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
+#bestparamgrid_r = np.mean(bestparamgrid_rs, axis=0)
 
-plot_IC14_map(bestparamgrid_r) # derotated
-plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
+#plot_IC14_map(bestparamgrid_r) # derotated
+#plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 

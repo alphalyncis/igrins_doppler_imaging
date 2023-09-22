@@ -11,7 +11,10 @@ from config_sim import *
 savedir = "sim_nkvsncell"
 band = "K"
 contrast = 0.8
-noisetype = "res+random"
+noisetype = "random"
+nlat, nlon = 10, 20
+modelmap = "2spot"
+alpha = 2000
 #################### Automatic ####################################
 
 if True:
@@ -111,12 +114,15 @@ assert savedir == "sim_nkvsncell"
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Make mock observed spectra
-observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
-                            savedir, plot_ts=False, colorbar=False)
+observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, 
+                            mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
+                            savedir, r=25, lat=45, plot_ts=False, colorbar=False)
 
 
-for nlat, nlon in zip([9], [18]):
-    for alpha in [2000, 3000, 4000, 5000, 7500, 10000]:
+for nk in [151]:
+    #for alpha in [1000, 2000, 5000]:
+    for nlat, nlon in zip([10, 12, 20], [20, 24, 40]):
+        print(f"---alpha={alpha}---")
         cut = nk - 70
         kwargs_IC14 = dict(
             phases=phases, 
@@ -136,7 +142,7 @@ for nlat, nlon in zip([9], [18]):
 
         bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
-        LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+        #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=niter_LSD, annotate=True)
 

@@ -130,16 +130,27 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = contrast
-        print(f"Running spot contrast={spot_brightness}")
+        print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
         fakemap[np.sqrt((y+lat)**2 + (x-n_lon/2)**2) <= r] = spot_brightness
 
+    if modelmap == "2spot":
+        spot_brightness = contrast
+        lat2 = 45
+        lon2 = 0
+        r2 = 20
+        print(f"Running spot brightness {spot_brightness*100}% of surrounding")
+        fakemap = np.ones((n_lat, n_lon))
+        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        fakemap[np.sqrt((y+lat)**2 + (x-n_lon/2)**2) <= r] = spot_brightness
+        fakemap[np.sqrt((y+lat2)**2 + (x-n_lon+lon2)**2) <= r2] = spot_brightness
+
     elif modelmap == "1band":
-        print(f"Running band amp = {contrast}")
         band_width = 15
         band_lat = 30
         amp = 1 - contrast
+        print(f"Running wave max amplitude diff {amp*100}%")
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
@@ -148,7 +159,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         #fakemap[band_ind] -= amp
 
     elif modelmap == "1uniband":
-        print(f"Running band amp = {contrast}")
+        print(f"Running band with brightness {contrast*100}% of surrounding")
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
@@ -156,11 +167,11 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         fakemap[band_ind] = contrast
         
     elif modelmap == "2band":
-        print(f"Running band amp = {contrast}")
         band_width = 10
         band_lat = 45
         band2_lat = 0
         amp = 1 - contrast
+        print(f"Running 2 waves max amplitude diff {amp*100}%")
         phase = 0.55 
         phase2 = 0.75
         fakemap = np.ones((n_lat, n_lon))
@@ -177,6 +188,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         fakemap = np.loadtxt(paths.data / 'modelmaps/gcm.txt')
         fakemap /= np.median(fakemap)
         diff = 1 - fakemap
+        print(f"Running GCM peak amplitude diff {diff*100}%")
         ampold = diff.max()
         amp = 1 - contrast
         diffnew = diff * amp / ampold
@@ -218,7 +230,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     observed = np.transpose(allchips_flux, axes=(1,0,2))
 
-    return observed
+    return observed, fakemap
 
 def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30):
     global wav_angs, err_LSD_profiles, dbeta
@@ -275,7 +287,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
     
     # shift kerns to center
-    #modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
+    modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
     
     # plot kerns
     #plot_kerns_timeseries(kerns, goodchips, dv, gap=0.02)
@@ -336,7 +348,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=50, transparent=True)
 
     # Plot fit result
     obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
@@ -1278,7 +1290,7 @@ def solve_DIME(
         flatmodel=flatmodel,
         flineSpline=flineSpline,
         mmap=mmap, dv=dv, dbeta=dbeta,
-        cc=cc
+        cc=cc, sampler=sampler
     )
         
     return bestparamgrid, res
@@ -1448,12 +1460,13 @@ def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False):
     for i,jj in enumerate(goodchips):
         for k in range(nobs):
             systematic_rv_offset = (modkerns[k,i]==modkerns[k,i].max()).nonzero()[0][0] - (dv==0).nonzero()[0][0] # find the rv offset
-            print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
             cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
+            print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
             cen_kerns[k,i] = kerns[k,i]
             if not sim: # shift kerns with same amount if not simulation
                 if instru != 'CRIRES': # don't shift kerns if crires
-                    pass
+                    if k==0:
+                        print("kern shifted to same amount")
                     #cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
     return cen_modkerns, cen_kerns
 
@@ -1566,7 +1579,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
 def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     '''Plot doppler map from an array.'''
     nlat, nlon = bestparamgrid.shape 
-    fig = plt.figure(figsize=(7,3))
+    fig = plt.figure(figsize=(5,3))
     ax = fig.add_subplot(111, projection='mollweide')
     lon = np.linspace(-np.pi, np.pi, nlon)
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
