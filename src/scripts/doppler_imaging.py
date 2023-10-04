@@ -371,9 +371,9 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
 
 def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=True):
     print("*** Using solver LSD+starry_lin ***")
-        
+
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
-    observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+    observation_2d = np.median(obskerns_norm, axis=1)
 
     # preprae data
     pad = 100
@@ -389,7 +389,7 @@ def solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     map_av[1] = kwargs_run['u1']
 
     soln = map_av.solve(
-        flux=np.flip(observation_norm, axis=1),
+        flux=np.flip(observation_2d, axis=1),
         theta=kwargs_run['theta'],
         normalized=True,
         fix_spectrum=True,
@@ -418,7 +418,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
     print(f"ydeg = {kwargs_run['ydeg']}")
 
     mean_profile = np.median(intrinsic_profiles, axis=0) # mean over chips
-    observation_norm = np.median(obskerns_norm, axis=1) # mean over chips
+    observation_2d = np.median(obskerns_norm, axis=1)
 
     # preprae data
     pad = 100
@@ -448,7 +448,7 @@ def solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_f
             f"obs",
             mu=tt.reshape(model_flux, (-1,)),
             sd=flux_err,
-            observed=np.flip(observation_norm,axis=1).reshape(-1,)
+            observed=np.flip(observation_2d,axis=1).reshape(-1,)
         )
 
     # Optimize!
@@ -1082,10 +1082,10 @@ def solve_DIME(
     # calc error for each obs
     smoothed = savgol_filter(obskerns_norm, 31, 3)
     resid = obskerns_norm - smoothed
-    err_pix = np.array([np.abs(resid[:,:,pix] - np.median(resid, axis=2)) for pix in range(nk)]) # error of each pixel in LP by MAD
-    err_LP = 1.4826 * np.median(err_pix, axis=0) # error of each LP (at each t and chip)
-    err_each_obs = err_LP.mean(axis=1)
-    err_observation_norm = np.tile(err_each_obs[:, np.newaxis], (1,nk)).ravel() # look like a step function over different times
+    err_pix = np.array([np.abs(resid[:,:,pix] - np.median(resid, axis=2)) for pix in range(nk)]) # error of each pixel in LP by MAD, shape=(nk, nobs, nchips)
+    err_LP = 1.4826 * np.median(err_pix, axis=0) # error of each LP, shape=(nobs, nchips)
+    err_each_obs = err_LP.mean(axis=1) # error of each obs, shape=(nobs)
+    err_observation_1d = np.tile(err_each_obs[:, np.newaxis], (1,nk)).ravel() # look like a step function over different times
 
     ### Prepare data for DIME
     modIP = 1. - np.concatenate((np.zeros(300), mean_profile, np.zeros(300)))
@@ -1148,7 +1148,7 @@ def solve_DIME(
         mask = np.zeros_like(observation_1d, dtype=bool)
         for central_idx in central_indices:
             mask[central_idx - width:central_idx + width + 1] = True
-        w_observation = (mask == True).astype(float) / err_observation_norm**2
+        w_observation = (mask == True).astype(float) / err_observation_1d**2
 
         if create_obs_from_diff:
             observation_1d = new_observation_1d
@@ -1158,13 +1158,14 @@ def solve_DIME(
         sc_observation_1d = observation_1d * out[0] + out[1]
 
         # perfect fit is when alpha=0 i.e. no smoothing
-        #fitargs = (sc_observation_norm, w_observation, Rmatrix, 0)
+        #fitargs = (sc_observation_1d, w_observation, Rmatrix, 0)
         #perfect_fit = an.gfit(dime.entropy_map_norm_sp, flatguess, fprime=dime.getgrad_norm_sp, args=fitargs, ftol=ftol, maxiter=1e4, bounds=bounds)
         # the metric to be minimized is (0.5*chisq - alpha*entropy)
         #perfect_model = dime.normalize_model(np.dot(perfect_fit[0], Rmatrix), nk)
-        #w_observation /=  w_observation.max() * (sc_observation_norm - perfect_model)[w_observation>0].std()**2
+        #w_observation /=  w_observation.max() * (sc_observation_1d - perfect_model)[w_observation>0].std()**2
 
     cc = None
+    sampler = None
     if spotfit and not eqarea:
         print("Running MCMC spot fitting...")
         nstep = 2500
@@ -1205,7 +1206,7 @@ def solve_DIME(
             guess2[7] = (guess2[3] + np.pi) % (2*np.pi)
 
             limits2 = limits + limits[1:]
-            spotargs2 = (dime.profile_spotmap,)+spotargs0 + (sc_observation_norm, w_observation, dict(uniformprior=limits2))
+            spotargs2 = (dime.profile_spotmap,)+spotargs0 + (sc_observation_1d, w_observation, dict(uniformprior=limits2))
             thisfit = an.fmin(pc.errfunc, guess2, args=spotargs2, full_output=True)
             test = dime.profile_spotmap(guess2, *spotargs0)
 
@@ -1697,12 +1698,12 @@ if __name__ == "__main__":
     #test_obs()
 
 '''
-indices = np.arange(1, observation_norm.size, 5)
-new_obs = np.delete(observation_norm, indices)
+indices = np.arange(1, observation_1d.size, 5)
+new_obs = np.delete(observation_1d, indices)
 indices_p = np.arange(1, mean_profile.size, 5)
 new_profile = np.delete(mean_profile, indices_p)
 
-obs=np.reshape(res['sc_observation_norm'], (nobs, nk))
+obs=np.reshape(res['sc_observation_1d'], (nobs, nk))
 model=np.reshape(res['model_observation'], (nobs, nk))
 flmodel = np.reshape(flatmodel, (nobs, nk))
 

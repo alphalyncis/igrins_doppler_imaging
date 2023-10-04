@@ -65,17 +65,19 @@ def make_eqarea_grid(ncell, verbose=False):
     """
     # 2023-03-25 XQ: make equal area grids
     def find_number_of_rows(Ncell, m0=10):
-        diff_old = Ncell
+        diff_old = 1e10
         m = m0
         while True:
+            if Ncell < 5:
+                raise ValueError("Number of cells is too small. At least 5 cells are needed.")
             ncells_per_row = np.array([int(2 * m * np.cos(n*np.pi/m)) for n in range(1, int(m/2))])
             Ncell_new = 2 * np.sum(ncells_per_row)
             diff = Ncell - Ncell_new
-            if np.abs(diff) > np.abs(diff_old):
-                return 2*len(ncells_per_row_old), Ncell_old, ncells_per_row_old
-            if diff > 0:
+            if np.abs(diff) > np.abs(diff_old): # right amount of cells, return the previous one
+                return 2*len(ncells_per_row_old), Ncell_old, ncells_per_row_old 
+            if diff > 0: # need more cells
                 m += 2
-            else:
+            else: # need less cells
                 m -= 2
             Ncell_old = Ncell_new
             ncells_per_row_old = ncells_per_row
