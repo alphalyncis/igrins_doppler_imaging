@@ -10,9 +10,9 @@ from config_run import *
 
 savedir = "igrinsK_nktest"
 instru = "IGRINS"
-band = "K"
+band = "H"
 goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
-modelspec = "t1500g1000f8"
+modelspec = "t1400g1000f8"
 
 #################### Automatic ####################################
 
@@ -122,7 +122,7 @@ for nk in nks:
 
     signal = 1 - smoothed.min(axis=2).mean(axis=0) # signal = line depth
     #noise = np.r_[obskerns_norm[:,:,:int(cut/2+1)], obskerns_norm[:,:,-int(cut/2+1):]].std(axis=2).mean(axis=0) # noise = std of the flat part
-    noise = err_LP.mean(axis=0) # mean error of a chip
+    noise = np.median(err_LP, axis=0) # mean error of a chip
     snr_LPs.append(signal/noise) # S/N of LP of each chip
     std_LPs.append(noise)
 
@@ -137,9 +137,9 @@ snr_LPs = np.array(snr_LPs)
 for i in range(10):  
     plt.plot(nks, snr_LPs[:, i], marker=".")
 plt.xlabel("nk")
-plt.axvline(151, color="k", linestyle="--", alpha=0.4)
+plt.axvline(125, color="k", linestyle="--", alpha=0.4)
 plt.ylabel("S/N of line profile")
-plt.text(0, 1, "IGRINS H", fontsize=12, transform=plt.gca().transAxes)
+plt.text(0.02, 0.93, f"IGRINS {band}", fontsize=12, transform=plt.gca().transAxes)
 plt.legend(labels=[f"order {c+1}" for c in goodchips[:10]], fontsize=7, bbox_to_anchor=(1,1))
 
 plt.subplot(1,2,2)
@@ -147,8 +147,8 @@ snr_LPs = np.array(snr_LPs)
 for i in range(10,20):  
     plt.plot(nks, snr_LPs[:, i], marker=".")
 plt.xlabel("nk")
-plt.text(53, 42, "IGRINS H", fontsize=12)
-plt.axvline(151, color="k", linestyle="--", alpha=0.4)
+plt.text(0.02, 0.93, f"IGRINS {band}", fontsize=12, transform=plt.gca().transAxes)
+plt.axvline(125, color="k", linestyle="--", alpha=0.4)
 plt.legend(labels=[f"order {c+1}" for c in goodchips[10:]], fontsize=7, bbox_to_anchor=(1,1))
 
 plt.tight_layout()
