@@ -10,14 +10,19 @@ from config_run import *
 
 savedir = "igrinsK"
 band = "K"
-goodchips_run[instru][target][band] = [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19]
-nk = 155
+incs["W1049B"] = 70
+#goodchips_run[instru][target][band] = [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19]
+LLD = 0.4
+nk = 125
 alpha = 2000
 use_eqarea = True
 
 #################### Automatic ####################################
 
 if True:
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
+
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
@@ -34,7 +39,7 @@ if True:
         model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
         pmod = f'linbroad_{modelspec}'
         rv = rvs[target]
-
+ 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
 
@@ -98,21 +103,8 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-for nlat, nlon in zip([10, 12, 20], [20, 24, 40]):
-    kwargs_IC14 = dict(
-        phases=phases, 
-        inc=inc, 
-        vsini=vsini, 
-        LLD=LLD, 
-        eqarea=use_eqarea, 
-        nlat=nlat, 
-        nlon=nlon,
-        alpha=alpha,
-        ftol=ftol
-    )
-    
-    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-    #make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
+#make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)

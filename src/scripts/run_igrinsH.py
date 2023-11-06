@@ -10,19 +10,23 @@ import paths
 from config_run import *
 
 use_eqarea = True
-
 savedir = "igrinsH"
 band = "H"
-nk = 155
-alpha = 5000
-goodchips_run[instru][target][band] = [0,1,2,3,4,5,16,17,18,19]
+nk = 125
+alpha = 2000
+#goodchips_run[instru][target][band] = [0,1,2,3,4,5,16,17,18,19]
+incs["W1049B"] = 70
+LLD = 0.4
 modelspec = "t1400g1000f8"
-nlat, nlon = 20, 40
+nlat, nlon = 10, 20
 
 
 #################### Automatic ####################################
 
 if True:
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
+
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
@@ -102,25 +106,8 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
-alphas = [0, 100, 1000]
-Q = []
-for alpha in alphas:
-    kwargs_IC14 = dict(
-        phases=phases, 
-        inc=inc, 
-        vsini=vsini, 
-        LLD=LLD, 
-        eqarea=use_eqarea, 
-        nlat=nlat, 
-        nlon=nlon,
-        alpha=alpha,
-        ftol=ftol
-    )
-    
-    # solve by solvers
 
-    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
-    Q.append(res['Q'])
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
@@ -132,11 +119,6 @@ for alpha in alphas:
 #plt.savefig(paths.figures / f"{savedir}/solver4.pdf", bbox_inches="tight", dpi=300)
 
 #opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
-
-plt.figure(figsize=(5,3))
-plt.plot(alphas, Q, marker=".")
-plt.xlabel("alpha")
-plt.ylabel("Q = chi^2 - alpha * S")
 
 print("Run success.")
 

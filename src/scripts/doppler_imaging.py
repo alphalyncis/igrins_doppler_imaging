@@ -348,7 +348,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
             contrast={kwargs_fig['contrast']} 
             limbdark={kwargs_IC14['LLD']}""",
         fontsize=8)
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=50, transparent=True)
+    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # Plot fit result
     obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
@@ -362,7 +362,10 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         plt.plot(res['dv'], bestmodel_2d[i] - 0.02*i, color='r', linewidth=1)
         plt.plot(res['dv'], flatmodel_2d[i] - 0.02*i, '--', color='gray', linewidth=1)
     plt.legend(labels=['obs', 'best-fit map', 'flat map'])
-    plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1_ts.png", bbox_inches="tight", dpi=100, transparent=True)
+    try:
+        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1_ts.png", bbox_inches="tight", dpi=100, transparent=True)
+    except:
+        pass
 
     if ret_both:
         return bestparamgrid_r, res
@@ -1509,6 +1512,7 @@ def plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02
     colors = [cm.gnuplot_r(x) for x in np.linspace(0, 1, nobs+4)]
     fig, ax = plt.subplots(figsize=(4, 5))
     for n in range(nobs):
+        ax.plot(dv[cut:-cut], obskerns_norm.mean(axis=0).mean(axis=0)[cut:-cut] - gap*n, "--", color="gray", alpha=0.5)
         ax.plot(dv[cut:-cut], obskerns_norm[n].mean(axis=0)[cut:-cut] - gap*n, color=colors[n+1])
         #plt.text(dv[cut] + 10, 1 - gap/4 - gap*n, f"{timestamps[n]:.1f}h")
     #plt.plot(dv, 1-intrinsic_profiles.mean(axis=0), color='k', label="intrinsic profile")
@@ -1586,7 +1590,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
     Lon,Lat = np.meshgrid(lon,lat)
     im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
-    contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
+    #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
         fig.colorbar(im)
     ax.set_yticks(np.linspace(-np.pi/2, np.pi/2, 7), labels=[])

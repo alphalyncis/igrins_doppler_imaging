@@ -11,18 +11,20 @@ from config_run import *
 savedir = "crires"
 instru = "CRIRES"
 band = "K"
-LLD = 0.7
-nlat, nlon = 20, 40
+LLD = 0.4
 nk = 101
 alpha = 10000
 rvs[target] = 9e-5
-incs[target] = 80
+incs[target] = 70
 
 use_eqarea = True
 
 #################### Automatic ####################################
 
 if True:
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
+
     # Auto consistent options
     contrast = "real"
     noisetype = "real"

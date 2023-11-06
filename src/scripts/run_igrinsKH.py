@@ -10,15 +10,19 @@ from config_run import *
 
 savedir = "igrinsHK"
 band = "both"
-nk = 155
+nk = 125
+alpha = 2000
 cut = nk - 70
-nlat, nlon = 20, 40
-LLD = 0.7
-u1 = LLD
+nlat, nlon = 10, 20
+LLD = 0.4
+incs["W1049B"] = 70
 
 
 #################### Automatic ####################################
 if True:
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
+
     # Auto consistent options
     contrast = "real"
     noisetype = "real"
@@ -131,23 +135,12 @@ kwargs_fig = dict(
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                     vsini, rv, period, timestamps[target], savedir, cut=cut)
 
-for alpha in [5000]:
-    kwargs_IC14 = dict(
-        phases=phases, 
-        inc=inc, 
-        vsini=vsini, 
-        LLD=LLD, 
-        eqarea=use_eqarea, 
-        nlat=nlat, 
-        nlon=nlon,
-        alpha=alpha,
-        ftol=ftol
-    )
     
-    # Solve by 5 solvers
-    bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
-                                                   annotate=False, colorbar=False, spotfit=False)
-    make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
+# Solve by 5 solvers
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
+                                                annotate=False, colorbar=False, spotfit=False)
+
+    #make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
     #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
     #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=2000, annotate=False, colorbar=False)
@@ -158,5 +151,5 @@ for alpha in [5000]:
 
     #opt_map = solve_starry_opt(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, lr=lr, niter=5000, annotate=False, colorbar=False)
 
-    print("Run success.")
+print("Run success.")
 

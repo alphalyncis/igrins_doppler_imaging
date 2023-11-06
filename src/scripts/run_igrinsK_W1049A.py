@@ -12,17 +12,19 @@ savedir = "igrinsK_W1049A"
 
 target = "W1049A"
 band = "K"
-nk = 75
-cut = nk - 70
-LLD = 0.7
-alpha = 5000
-nlat, nlon = 9, 18
+nk = 125
+LLD = 0.4
+alpha = 2000
 goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7,8,13,14,15,16,17,18,19]
 
 #################### Automatic ####################################
 
 if True:
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
+
     # Auto consistent options
+    cut = nk - 70
     contrast = "real"
     noisetype = "real"
     if map_type == "eqarea":
@@ -99,15 +101,15 @@ print(f"Using real observation {model_datafile}")
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Compute LSD mean profile
-intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
-                                                     vsini, rv, period, timestamps[target], savedir, cut=cut)
+intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
+                                                     period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
 
-LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+#LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
-LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
+#LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)
 
 #lin_map = solve_starry_lin(mean_spectrum, observed, wav_nm, wav0_nm, kwargs_run, kwargs_fig, annotate=True)
 #plt.figure(figsize=(5,3))
