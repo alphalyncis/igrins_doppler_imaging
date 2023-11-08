@@ -13,8 +13,6 @@ savedir = "igrinsHK_W1049A"
 target = "W1049A"
 band = "both"
 nk = 125
-cut = nk-70
-LLD = 0.7
 alpha = 2000
 
 
@@ -37,7 +35,6 @@ if True:
         model_datafileK = paths.data / f'{instru}_{target}_K_{modelspec}.pickle'
         model_datafileH = paths.data / f'{instru}_{target}_H_{modelspec}.pickle'
         pmod = f'linbroad_{modelspec}'
-        rv = rvs[target]
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
@@ -46,6 +43,7 @@ if True:
     period = periods[target]
     inc = incs[target]
     vsini = vsinis[target]
+    rv = rvs[target]
     veq = vsini / np.sin(inc * np.pi / 180)
 
     # set time and period parameters
@@ -110,6 +108,8 @@ mean_spectrumH, templateH, observedH, residualH, errorH, wav_nmH, wav0_nmH = loa
 #print("mean_spetrumH:", mean_spectrumH.shape)
 #print("observedH:", observedH.shape)
 
+print("rv:", rv)
+
 wav_nm = np.concatenate((wav_nmH, wav_nmK), axis=0)
 wav0_nm = np.concatenate((wav0_nmH, wav0_nmK), axis=0)
 mean_spectrum = np.concatenate((mean_spectrumH, mean_spectrumK), axis=0)
@@ -137,8 +137,9 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False)
+plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=90, vmax=106)
+mapA_HK = bestparamgrid_r.copy()
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)

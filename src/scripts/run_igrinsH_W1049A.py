@@ -13,8 +13,6 @@ savedir = "igrinsH_W1049A"
 target = "W1049A"
 band = "H"
 nk = 125
-LLD = 0.4
-u1 = LLD
 alpha = 2000
 #goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7, 8,9,10, 12,13,14,15,16,17,18,19]
 #[1, 2, 3, 4, 5, 17, 18, 19]
@@ -107,8 +105,9 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      vsini, rv, period, timestamps[target], savedir, cut=nk-70)
 
 # Solve by 5 solvers
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False)
+plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=90, vmax=106)
+mapA_H = bestparamgrid_r.copy()
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)

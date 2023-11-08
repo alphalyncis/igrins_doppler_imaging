@@ -12,11 +12,7 @@ savedir = "igrinsHK"
 band = "both"
 nk = 125
 alpha = 2000
-cut = nk - 70
-nlat, nlon = 10, 20
-LLD = 0.4
-incs["W1049B"] = 70
-
+use_eqarea = True
 
 #################### Automatic ####################################
 if True:
@@ -24,6 +20,7 @@ if True:
         os.makedirs(paths.figures / savedir)
 
     # Auto consistent options
+    cut = nk - 70
     contrast = "real"
     noisetype = "real"
     if map_type == "eqarea":
@@ -91,7 +88,7 @@ if True:
 
 assert simulation_on == False
 assert savedir == "igrinsHK"
-
+rv=7.05e-5
 # set chips to include
 goodchipsK = goodchips_run[instru][target]["K"]
 goodchipsH = goodchips_run[instru][target]["H"]
@@ -139,7 +136,8 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
 # Solve by 5 solvers
 bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, 
                                                 annotate=False, colorbar=False, spotfit=False)
-
+plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
+mapB_HK = bestparamgrid_r.copy()
     #make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
     #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 

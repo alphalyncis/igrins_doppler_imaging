@@ -14,15 +14,13 @@ contrast = 0.8
 noisetype = "random"
 roll = 0.28
 
-nk = 155
-cut = nk - 70
-nlat, nlon = 10, 20
-alpha = 2000
+nk = 125
 
 #################### Automatic ####################################
 
 if True:
     # Auto consistent options
+    cut = nk - 70
     if map_type == "eqarea":
         use_eqarea = True
 

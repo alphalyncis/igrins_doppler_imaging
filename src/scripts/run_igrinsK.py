@@ -10,9 +10,7 @@ from config_run import *
 
 savedir = "igrinsK"
 band = "K"
-incs["W1049B"] = 70
 #goodchips_run[instru][target][band] = [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19]
-LLD = 0.4
 nk = 125
 alpha = 2000
 use_eqarea = True
@@ -103,8 +101,10 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-#make_gif_map(bestparamgrid_r, inc, period, kwargs_fig['savedir'])
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False)
+plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
+mapB_K = bestparamgrid_r.copy()
+make_gif_map(mapB_K, inc, period, kwargs_fig['savedir'])
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)

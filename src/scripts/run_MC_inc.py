@@ -1,7 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.io import fits
-from astropy.table import Table
 
 ### Measurements
 vsini =     {"W1049B": {"K": 27.3, "H": 31.9, "avg": 28.6},
@@ -14,8 +12,8 @@ period_err = 0.3
 radius, radius_err = 1.00, 0.1
 
 # generate Gaussian samples
-target = "W1049A"
-tag = "avg"
+target = "W1049B"
+tag = "K"
 vsini_arr = np.random.normal(vsini[target][tag], vsini_err[target][tag], 100000)
 radius_arr = np.random.normal(radius,radius_err, 100000)
 period_arr = np.random.normal(period[target], period_err, 100000)
@@ -40,29 +38,31 @@ def arcsin(theta_arr):
 			ans[i] = np.pi/2
 	return ans
 
-hfont = {'fontname':'Helvetica', 'size':'10'}
+hfont = {'size':'10'}
 fig = plt.figure(figsize=(10,3.5))
-plt.title(f"measurement tag: {target} {tag}")
-plt.axis('off')
+fig.suptitle(f"measurement tag: {target} {tag}, period = {period[target]:.1f}±{period_err:.1f} h, radius = {radius:.1f}±{radius_err:.1f} Rjup")
 plt.subplot(141)
-plt.hist(veq_arr, 30, density=True, color='blue')
-plt.xlabel('equatorial velocity (km/s)', **hfont)
-plt.axvline(np.median(veq_arr), color='k')
-plt.axvline(np.mean(veq_arr), linestyle='--', color='k')
-
-plt.subplot(142)
 plt.hist(vsini_arr, 30, density=True, color='green')
 plt.xlabel('v sin i (km/s)', **hfont)
 plt.axvline(np.median(vsini_arr), color='k')
 plt.axvline(np.mean(vsini_arr), linestyle='--', color='k')
+plt.title(f"v sin i = {np.mean(vsini_arr):.1f}±{np.std(vsini_arr):.1f}", transform=plt.gca().transAxes, **hfont)
+
+plt.subplot(142)
+plt.hist(veq_arr, 30, density=True, color='blue')
+plt.xlabel('equatorial velocity (km/s)', **hfont)
+plt.axvline(np.median(veq_arr), color='k')
+plt.axvline(np.mean(veq_arr), linestyle='--', color='k')
+plt.title(f"veq = {np.mean(veq_arr):.1f}±{np.std(veq_arr):.1f}", transform=plt.gca().transAxes, **hfont)
 
 plt.subplot(143)
 plt.hist(sini_arr, 30, density=True, color='red')
 plt.xlabel('sin i', **hfont)
 plt.axvspan(xmin=1, xmax=plt.xlim()[1], color='gray', alpha=0.4, label="unphysical")
-plt.text(0.54, 0.9, "unphysical", transform=plt.gca().transAxes)
+plt.text(0.54, 0.9, "unphysical", transform=plt.gca().transAxes, alpha=0.7, **hfont)
 plt.axvline(np.median(sini_arr), color='k')
 plt.axvline(np.mean(sini_arr), linestyle='--', color='k')
+plt.title(f"sin i = {np.mean(sini_arr):.1f}±{np.std(sini_arr):.1f}", transform=plt.gca().transAxes, **hfont)
 
 plt.subplot(144)
 inc_arr = arcsin(sini_arr)*(180./np.pi)
@@ -71,7 +71,7 @@ plt.xlabel('i (degrees)', **hfont)
 plt.axvline(np.median(inc_arr), color='k', label=f"median: {np.median(inc_arr):.1f}")
 plt.axvline(np.mean(inc_arr), linestyle='--', color='k', label=f"mean: {np.mean(inc_arr):.1f}")
 #plt.errorbar(np.mean(inc_arr), plt.ylim()[1]*0.8, xerr=np.std(inc_arr), color="k", capsize=2)
-plt.text(0.1, 0.72, f"i = {np.mean(inc_arr):.1f}±{np.std(inc_arr):.1f}", transform=plt.gca().transAxes)
+plt.title(f"i = {np.mean(inc_arr):.1f}±{np.std(inc_arr):.1f}", transform=plt.gca().transAxes, **hfont)
 plt.xticks(np.linspace(0, 90, 10))
 plt.xlim(0, 93)
 

@@ -148,7 +148,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     elif modelmap == "1band":
         band_width = 15
-        band_lat = 30
+        band_lat = 0
         amp = 1 - contrast
         print(f"Running wave max amplitude diff {amp*100}%")
         phase = 0.7 #0-1?
@@ -336,7 +336,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
-        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2.) # smoothed contour lines
+        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2., colorbar=colorbar) # smoothed contour lines
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:
@@ -860,14 +860,15 @@ def dsa(r, i, Nk, **kw): #, w=None, verbose=False, noback=False):
         Also
 
     :SEE_ALSO:  
-       :func:`dsamulti`    """
-#    """Testing Bramich's algorithm for 1D spectra."""
-#    Based on the 2D Bramich (2008) DIA algorithm
-#    -----
-#    2008-11-14 10:56 IJC: Created @ UCLA.
-#    2008-11-18 11:12 IJC: Registration now works correctly
-#    2008-12-09 16:10 IJC: Somewhat optimized
-#    2009-02-26 22:06 IJC: Added retinv, changed optional input format
+       :func:`dsamulti`
+    
+    Based on the 2D Bramich (2008) DIA algorithm
+    -----
+    2008-11-14 10:56 IJC: Created @ UCLA.
+    2008-11-18 11:12 IJC: Registration now works correctly
+    2008-12-09 16:10 IJC: Somewhat optimized
+    2009-02-26 22:06 IJC: Added retinv, changed optional input format
+    """
 
     defaults = dict(verbose=False, w=None, noback=False, tol=1e-10, \
                         retinv=False)
@@ -1041,7 +1042,7 @@ def solve_DIME(
         plot_unstretched_map: bool = False,
         spotfit: bool = False,
         create_obs_from_diff: bool = True
-) -> np.ndarray:
+    ) -> np.ndarray:
     """
     Copied from IC14orig except kerns used to compute weights should take 
     input from cen_kerns (profiles centered to rv=0).
@@ -1456,7 +1457,7 @@ def remove_spike(data, kern_size=10, lim_denom=5):
             data_filt[i] = np.median(seg[int(kern_size/5):-int(kern_size/5)])
     return data_filt
 
-def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False):
+def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False, shiftkerns=False):
     '''shift modkerns to center at dv=0 and shift kerns for same amount.'''
     nobs, nchip, nk = modkerns.shape
     cen_modkerns = np.zeros_like(modkerns)
@@ -1464,14 +1465,17 @@ def shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv, sim=False):
     for i,jj in enumerate(goodchips):
         for k in range(nobs):
             systematic_rv_offset = (modkerns[k,i]==modkerns[k,i].max()).nonzero()[0][0] - (dv==0).nonzero()[0][0] # find the rv offset
-            cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
             print("chip:", jj , "obs:", k, "offset:", systematic_rv_offset)
+            cen_modkerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, modkerns[k,i]) # shift ip to center at dv=0
+            if k ==0:
+                print("modkerns shifted to center.")
             cen_kerns[k,i] = kerns[k,i]
             if not sim: # shift kerns with same amount if not simulation
                 if instru != 'CRIRES': # don't shift kerns if crires
-                    if k==0:
-                        print("kern shifted to same amount")
-                    #cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
+                    if shiftkerns:
+                        cen_kerns[k,i] = np.interp(np.arange(nk), np.arange(nk) - systematic_rv_offset, kerns[k,i])
+                        if k ==0:
+                            print("kerns shifted to same amount.")
     return cen_modkerns, cen_kerns
 
 def cont_normalize_kerns(cen_kerns, instru):
@@ -1581,7 +1585,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
 
-def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
+def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None):
     '''Plot doppler map from an array.'''
     nlat, nlon = bestparamgrid.shape 
     fig = plt.figure(figsize=(5,3))
@@ -1589,7 +1593,10 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     lon = np.linspace(-np.pi, np.pi, nlon)
     lat = np.linspace(-np.pi/2., np.pi/2., nlat)
     Lon,Lat = np.meshgrid(lon,lat)
-    im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
+    if vmax is None:
+        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
+    else:
+        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud', vmin=vmin, vmax=vmax)
     #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
         fig.colorbar(im)
@@ -1599,7 +1606,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1):
     for item in ax.spines.values():
         item.set_linewidth(1.2)
 
-def make_gif_map(bestparamgrid, inc, period, savedir, step=15, fps=4):
+def make_gif_map(bestparamgrid, inc, period, savedir, step=15, fps=4, vmax=110):
     fig = plt.figure(figsize=(10,5))
     y, x = bestparamgrid.shape
 
@@ -1610,7 +1617,7 @@ def make_gif_map(bestparamgrid, inc, period, savedir, step=15, fps=4):
     plt.savefig(paths.figures / f"{savedir}/solver1_map.png", bbox_inches='tight', dpi=200, pad_inches=0)
     img = Image.open(paths.figures / f"{savedir}/solver1_map.png")
     img = np.array(img.convert('L'), dtype='float64')
-    img /= img.max()
+    img /= vmax
 
     # make GIF with PIL
     Nlat, Nlon = img.shape
@@ -1624,7 +1631,7 @@ def make_gif_map(bestparamgrid, inc, period, savedir, step=15, fps=4):
     def update(frame):
         ax = plt.axes(projection=ccrs.Orthographic(frame*step, 90-inc))
         gl = ax.gridlines(xlocs=range(-180, 180, 30), ylocs=range(-90, 90, 30), color='gray', linewidth=0.3)
-        im = ax.imshow(img, origin="lower", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree(), cmap=plt.cm.plasma, vmin=0, vmax=1)
+        im = ax.imshow(img, origin="lower", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree(), cmap=plt.cm.plasma, vmin=0.77, vmax=1)
         time_text.set_text(f'{frame*period/num_frames+0.2:.1f}h')
         for item in ax.spines.values():
             item.set_linewidth(1.5)

@@ -13,9 +13,9 @@ instru = "CRIRES"
 band = "K"
 LLD = 0.4
 nk = 101
-alpha = 2000
-rvs[target] = 9e-5
-incs[target] = 70
+alpha = 5000
+#modelspec='lte015.0-5.0'
+nlat, nlon = 12, 24
 
 use_eqarea = True
 
@@ -38,10 +38,11 @@ if True:
     nchip = len(goodchips)
 
     # set model files to use
+    model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
     if "t1" in modelspec:
-        model_datafile = paths.data / f'{instru}_{target}_{band}_{modelspec}.pickle'
         pmod = f'linbroad_{modelspec}'
-        rv = rvs[target]
+    elif "lte" in modelspec:
+        pmod = f'lin_{modelspec}' # modelspec='lte015'
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'
     cont_file = paths.data / f'linelists/{pmod}C.fits'
@@ -50,6 +51,7 @@ if True:
     period = periods[target]
     inc = incs[target]
     vsini = vsinis[target]
+    rv = rvs[target]
     veq = vsini / np.sin(inc * np.pi / 180)
 
     # set time and period parameters
@@ -96,19 +98,18 @@ if True:
 
 assert simulation_on == False
 print(f"Using real observation {model_datafile}")
-
+rv = 9e-5
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Compute LSD mean profile
-
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, 
                                                      nk, vsini, rv, period, timestamps[target], savedir, cut=cut)
 
 
 # Solve by 5 solvers
-bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)))
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False, create_obs_from_diff=True)
+plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.75)), colorbar=True, vmin=85, vmax=110)
 #make_gif_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)), inc, period, kwargs_fig['savedir'])
 
 

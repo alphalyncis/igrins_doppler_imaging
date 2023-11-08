@@ -10,7 +10,7 @@ from config_sim import *
 
 modelmap = "2spot"
 savedir = "sim_spot"
-contrast = 0.6
+contrast = 0.8
 roll = 0.28
 noisetype = "random"
 
@@ -118,7 +118,7 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 
 # Make mock observed spectra
 observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
-                            savedir, r=30, lat=0, plot_ts=False, colorbar=False)
+                            savedir, r=25, lat=0, plot_ts=False, colorbar=False)
 
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
@@ -127,7 +127,7 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
 bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
 
 
-plot_IC14_map(bestparamgrid_r) # derotated
+plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110) # derotated
 plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
