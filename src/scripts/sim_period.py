@@ -10,8 +10,7 @@ import os
 from config_sim import *
 
 target = "W1049A"
-nk = 71
-contrast = 0.5
+contrast = 0.6
 roll = 0.8
 noisetype = "res+random"
 goodchips_sim[instru][band] = [2, 3, 4]
@@ -19,7 +18,8 @@ goodchips_sim[instru][band] = [2, 3, 4]
 tobs = 5
 period = 7
 
-for period_true in [5, 6, 7, 8]:
+maps = []
+for period_true in [10, 12]:
     savedir = f"sim_period/{period_true}"
     if not os.path.exists(paths.figures / savedir):
         os.makedirs(paths.figures / savedir)
@@ -27,6 +27,7 @@ for period_true in [5, 6, 7, 8]:
     #################### Automatic ####################################
 
     if True:
+        cut = nk - 70
         # Auto consistent options
         if map_type == "eqarea":
             use_eqarea = True
@@ -124,15 +125,17 @@ for period_true in [5, 6, 7, 8]:
     mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
     # Make mock observed spectra
-    observed = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                                noisetype, kwargs_sim, savedir, r=30, lat=30, plot_ts=True, colorbar=False)
+    observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
+                                noisetype, kwargs_sim, savedir, r=25, lat=0, plot_ts=False, colorbar=False)
 
     # Compute LSD mean profile
-    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamp, savedir, cut=1)
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
+                                                         period, timestamp, savedir, cut=cut)
 
     bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)
+    maps.append(bestparamgrid_r)
 
-    LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
+    #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
     #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=niter_LSD, annotate=True)
 
