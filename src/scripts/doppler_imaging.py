@@ -126,24 +126,25 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
 
 def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm,
                      error, residual, noisetype, kwargs_sim, savedir, pad=100, n_lat=181, n_lon=361, 
-                     r=33, lat_pos=30, lon_pos=0, r2=20, lat2_pos=45, lon2_pos=0,
-                     plot_ts=False, colorbar=True):
+                     r_deg=33, lat_deg=30, lon_deg=0, r2=20, lat2_deg=45, lon2_deg=0,
+                     plot_ts=False, plot_IC14=True, colorbar=True):
     nobs = error.shape[0]
+    cmap = plt.cm.gist_heat
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = contrast
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat))
-        fakemap[np.sqrt((y+lat_pos)**2 + (x+lon_pos)**2) <= r] = spot_brightness # default spot at lon=0
+        fakemap[np.sqrt((y+lat_deg)**2 + (x-lon_deg)**2) <= r_deg] = spot_brightness # default spot at lon=0
 
     if modelmap == "2spot":
         spot_brightness = contrast
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
-        fakemap[np.sqrt((y+lat_pos)**2 + (x+lon_pos)**2) <= r] = spot_brightness
-        fakemap[np.sqrt((y+lat2_pos)**2 + (x+lon2_pos)**2) <= r2] = spot_brightness
+        fakemap[np.sqrt((y+lat_deg)**2 + (x+lon_deg)**2) <= r] = spot_brightness
+        fakemap[np.sqrt((y+lat2_deg)**2 + (x+lon2_deg)**2) <= r2] = spot_brightness
 
     elif modelmap == "1band":
         band_width = 15
@@ -162,7 +163,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
-        band_ind = np.s_[(90-lat_pos)-r:(90-lat_pos)+r]
+        band_ind = np.s_[(90-lat_deg)-r_deg:(90-lat_deg)+r_deg]
         fakemap[band_ind] = contrast
         
     elif modelmap == "2band":
@@ -220,8 +221,35 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
 
     allchips_flux = np.array(allchips_flux)
 
-    fig, ax = plt.subplots()
-    sim_map.show(ax=ax, projection="moll", colorbar=colorbar)
+    # Plot fakemap
+    plot_map = starry.Map(lazy=False, **kwargs_sim)
+    plot_map.load(fakemap)
+    dif = 1 - contrast
+
+    if plot_IC14:
+        fig = plt.figure(figsize=(5,3))
+        ax2 = fig.add_subplot(111)
+        image = plot_map.render(projection="moll")
+        print(dif)
+        print(image.max(), image.min())
+        im = ax2.imshow(image, cmap=cmap, norm=Normalize(vmax=1+dif, vmin=1-dif), aspect=0.5, origin="lower", interpolation="nearest")
+        ax2.axis("off")
+        fig.colorbar(im, ax=ax2, fraction=0.023, pad=0.045)
+        ax = fig.add_subplot(111, projection='mollweide')
+        ax.patch.set_alpha(0)
+        yticks = np.linspace(-np.pi/2, np.pi/2, 7)[1:-1]
+        xticks = np.linspace(-np.pi, np.pi, 13)[1:-1]
+        ax.set_yticks(yticks, labels=[f'{deg:.0f}˚' for deg in yticks*180/np.pi], fontsize=7, alpha=0.5)
+        ax.set_xticks(xticks, labels=[f'{deg:.0f}˚' for deg in xticks*180/np.pi], fontsize=7, alpha=0.5)
+        fig.colorbar(im, ax=ax, fraction=0.023, pad=0.04, alpha=0)
+        ax.grid('major', color='k', linewidth=0.25, alpha=0.7)
+        for item in ax.spines.values():
+            item.set_linewidth(1.2)
+    
+    else:
+        fig, ax = plt.subplots()
+        plot_map.show(ax=ax, projection="moll", colorbar=colorbar, cmap=cmap, norm=Normalize(vmax=1+dif, vmin=1-dif))
+
     plt.savefig(paths.figures / f"{savedir}/fakemap.png", bbox_inches="tight", dpi=100, transparent=True)
 
     if plot_ts:
@@ -229,7 +257,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
 
     observed = np.transpose(allchips_flux, axes=(1,0,2))
 
-    return observed, fakemap
+    return observed, image
 
 def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30, plotspec=False):
     global wav_angs, err_LSD_profiles, dbeta
@@ -1592,6 +1620,8 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
 
 def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None, cmap=plt.cm.plasma):
     '''Plot doppler map from an array.'''
+    cmap = plt.cm.gist_heat
+    cmap.set_bad('gray', 1)
     fig = plt.figure(figsize=(5,3))
     ax = fig.add_subplot(111, projection='mollweide')
     lon = np.linspace(-np.pi, np.pi, bestparamgrid.shape[1])
@@ -1603,9 +1633,11 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, v
         im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=cmap, shading='gouraud', vmin=vmin, vmax=vmax)
     #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
-        fig.colorbar(im)
-    ax.set_yticks(np.linspace(-np.pi/2, np.pi/2, 7), labels=[])
-    ax.set_xticks(np.linspace(-np.pi, np.pi, 13), labels=[])
+        fig.colorbar(im, fraction=0.023, pad=0.04)
+    yticks = np.linspace(-np.pi/2, np.pi/2, 7)[1:-1]
+    xticks = np.linspace(-np.pi, np.pi, 13)[1:-1]
+    ax.set_yticks(yticks, labels=[f'{deg:.0f}˚' for deg in yticks*180/np.pi], fontsize=7, alpha=0.5)
+    ax.set_xticks(xticks, labels=[f'{deg:.0f}˚' for deg in xticks*180/np.pi], fontsize=7, alpha=0.5)
     ax.grid('major', color='k', linewidth=0.25)
     for item in ax.spines.values():
         item.set_linewidth(1.2)
