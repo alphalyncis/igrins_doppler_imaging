@@ -73,7 +73,7 @@ for period_true in [10, 12]:
         veq = vsini / np.sin(inc * np.pi / 180)
 
         # set time and period parameters
-        timestamp = np.linspace(0, tobs, nobs)  # simulate equal time interval obs
+        timestamp = np.linspace(0, tobs, nobs)  # observed time points in hours
         phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad     # guessed
         theta = 360.0 * timestamp / period      # 0 ~ 360 in degree   # guessed 
         theta_true = 360.0 * timestamp / period_true # sim using true period, retrieve using guessed period

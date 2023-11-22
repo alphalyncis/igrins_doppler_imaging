@@ -124,27 +124,26 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
 
     return mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm
 
-def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spectrum, wav_nm, wav0_nm,
-                     error, residual, noisetype, kwargs_sim, savedir, r=33, lat=30, pad=100, plot_ts=False, colorbar=True):
+def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm,
+                     error, residual, noisetype, kwargs_sim, savedir, pad=100, n_lat=181, n_lon=361, 
+                     r=33, lat_pos=30, lon_pos=0, r2=20, lat2_pos=45, lon2_pos=0,
+                     plot_ts=False, colorbar=True):
     nobs = error.shape[0]
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = contrast
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
-        fakemap[np.sqrt((y+lat)**2 + (x-n_lon/2)**2) <= r] = spot_brightness
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat))
+        fakemap[np.sqrt((y+lat_pos)**2 + (x+lon_pos)**2) <= r] = spot_brightness # default spot at lon=0
 
     if modelmap == "2spot":
         spot_brightness = contrast
-        lat2 = 45
-        lon2 = 0
-        r2 = 20
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
-        fakemap[np.sqrt((y+lat)**2 + (x-n_lon/2)**2) <= r] = spot_brightness
-        fakemap[np.sqrt((y+lat2)**2 + (x-n_lon+lon2)**2) <= r2] = spot_brightness
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
+        fakemap[np.sqrt((y+lat_pos)**2 + (x+lon_pos)**2) <= r] = spot_brightness
+        fakemap[np.sqrt((y+lat2_pos)**2 + (x+lon2_pos)**2) <= r2] = spot_brightness
 
     elif modelmap == "1band":
         band_width = 15
@@ -153,7 +152,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         print(f"Running wave max amplitude diff {amp*100}%")
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
         band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
         fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
         #fakemap[band_ind] -= amp
@@ -162,8 +161,8 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         print(f"Running band with brightness {contrast*100}% of surrounding")
         phase = 0.7 #0-1?
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
-        band_ind = np.s_[(90-lat)-r:(90-lat)+r]
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
+        band_ind = np.s_[(90-lat_pos)-r:(90-lat_pos)+r]
         fakemap[band_ind] = contrast
         
     elif modelmap == "2band":
@@ -175,7 +174,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
         phase = 0.55 
         phase2 = 0.75
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(0, 360, n_lon), np.linspace(-90, 90, n_lat), )
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
         band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
         fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
         band2_ind = np.s_[(90-band2_lat)-band_width:(90-band2_lat)+band_width]
@@ -232,7 +231,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, n_lat, n_lon, mean_spe
 
     return observed, fakemap
 
-def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30):
+def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30, plotspec=False):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
     nobs = observed.shape[0]
@@ -272,20 +271,21 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
             deltaspecs[kk,i] = deltaspec
 
     # Plot lines vs. model
-    plt.figure(figsize=(15, 2*nchip))
-    t=0
-    for i, jj in enumerate(goodchips):
-        plt.subplot(nchip,1,i+1)
-        plt.plot(wav_angs[i], deltaspecs[t,i], linewidth=0.5, color='C0', label="deltaspec")
-        plt.plot(wav_angs[i], template[t,i,pad:-pad], linewidth=0.6, color='C1', label="chipmodnobroad")
-        plt.plot(wav_angs[i], observed[t,i], linewidth=0.6, color='k', label="obs")
-        plt.text(x=wav_angs[i].min()-10, y=0, s=f"order={jj}")
-        if i==0:
-            plt.title(f"{pmod} model vs. lines at t={t}")
-    plt.legend(loc=4, fontsize=9)
-    #plt.show()
-    plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
-    
+    if plotspec:
+        plt.figure(figsize=(15, 2*nchip))
+        t=0
+        for i, jj in enumerate(goodchips):
+            plt.subplot(nchip,1,i+1)
+            plt.plot(wav_angs[i], deltaspecs[t,i], linewidth=0.5, color='C0', label="deltaspec")
+            plt.plot(wav_angs[i], template[t,i,pad:-pad], linewidth=0.6, color='C1', label="chipmodnobroad")
+            plt.plot(wav_angs[i], observed[t,i], linewidth=0.6, color='k', label="obs")
+            plt.text(x=wav_angs[i].min()-10, y=0, s=f"order={jj}")
+            if i==0:
+                plt.title(f"{pmod} model vs. lines at t={t}")
+        plt.legend(loc=4, fontsize=9)
+        #plt.show()
+        plt.savefig(paths.output / "LSD_deltaspecs.png", transparent=True)
+        
     # shift kerns to center
     modkerns, kerns = shift_kerns_to_center(modkerns, kerns, instru, goodchips, dv)
     
@@ -1094,7 +1094,7 @@ def solve_DIME(
     ### Prepare data for DIME
     modIP = 1. - np.concatenate((np.zeros(300), mean_profile, np.zeros(300)))
     modDV = - np.arange(np.floor(-modIP.size/2.+.5), np.floor(modIP.size/2.+.5)) * dbeta * const.c / 1e3
-    flineSpline = interpolate.UnivariateSpline(modDV[::-1], modIP[::-1], k=1., s=0.)
+    flineSpline = interpolate.UnivariateSpline(modDV[::-1], modIP[::-1], k=1., s=0.) # function that returns the intrinsic profile
     dv = -dbeta * np.arange(np.floor(-nk/2.+.5), np.floor(nk/2.+.5)) * const.c / 1e3 # km/s
 
     ### Reconstruct map
@@ -1115,7 +1115,8 @@ def solve_DIME(
     allfits = []
 
     # Compute R matrix
-    Rmatrix = np.zeros((ncell, nobs*dv.size), dtype=np.float32) 
+    Rmatrix = np.zeros((ncell, nobs*dv.size), dtype=np.float32)
+    uncovered = list(range(ncell))
     for kk, rot in enumerate(phases):
         speccube = np.zeros((ncell, dv.size), dtype=np.float32) 
         if eqarea:
@@ -1123,8 +1124,10 @@ def solve_DIME(
         else:
             this_map = ELL_map.map(nlat=nlat, nlon=nlon, inc=inc_, deltaphi=-rot)
         this_doppler = 1. + vsini*this_map.visible_rvcorners.mean(1)/const.c/np.cos(inc_) # mean rv of each cell in m/s
-        good = (this_map.projected_area>0) * np.isfinite(this_doppler)
+        good = (this_map.projected_area>0) * np.isfinite(this_doppler)    
         for ii in good.nonzero()[0]:
+            if ii in uncovered:
+                uncovered.remove(ii) # remove cells that are visible at this rot
             speccube[ii,:] = flineSpline(dv + (this_doppler[ii]-1)*const.c/1000.)
         limbdarkening = (1. - LLD) + LLD * this_map.mu
         Rblock = speccube * ((limbdarkening*this_map.projected_area).reshape(this_map.ncell, 1)*np.pi/this_map.projected_area.sum())
@@ -1249,6 +1252,8 @@ def solve_DIME(
     model_observation = dime.normalize_model(np.dot(bestparams, Rmatrix), nk)
     metric, chisq, entropy = dime.entropy_map_norm_sp(bestparams, *fitargs, retvals=True)
     print("metric:", metric, "chisq:", chisq, "entropy:", entropy)
+
+    bestparams[uncovered] = np.nan # set completely uncovered cells to nan
 
     # reshape into grid
     if eqarea:
@@ -1585,18 +1590,17 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
 
-def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None):
+def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None, cmap=plt.cm.plasma):
     '''Plot doppler map from an array.'''
-    nlat, nlon = bestparamgrid.shape 
     fig = plt.figure(figsize=(5,3))
     ax = fig.add_subplot(111, projection='mollweide')
-    lon = np.linspace(-np.pi, np.pi, nlon)
-    lat = np.linspace(-np.pi/2., np.pi/2., nlat)
-    Lon,Lat = np.meshgrid(lon,lat)
+    lon = np.linspace(-np.pi, np.pi, bestparamgrid.shape[1])
+    lat = np.linspace(-np.pi/2., np.pi/2., bestparamgrid.shape[0])
+    Lon, Lat = np.meshgrid(lon,lat)
     if vmax is None:
-        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud')
+        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=cmap, shading='gouraud')
     else:
-        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=plt.cm.plasma, shading='gouraud', vmin=vmin, vmax=vmax)
+        im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=cmap, shading='gouraud', vmin=vmin, vmax=vmax)
     #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
         fig.colorbar(im)
