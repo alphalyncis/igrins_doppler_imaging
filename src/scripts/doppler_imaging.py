@@ -129,7 +129,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
                      r_deg=33, lat_deg=30, lon_deg=0, r2=20, lat2_deg=45, lon2_deg=0,
                      plot_ts=False, plot_IC14=True, colorbar=True):
     nobs = error.shape[0]
-    cmap = plt.cm.gist_heat
+    cmap = "gist_heat"
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = contrast
@@ -230,18 +230,18 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         fig = plt.figure(figsize=(5,3))
         ax2 = fig.add_subplot(111)
         image = plot_map.render(projection="moll")
-        print(dif)
-        print(image.max(), image.min())
         im = ax2.imshow(image, cmap=cmap, norm=Normalize(vmax=1+dif, vmin=1-dif), aspect=0.5, origin="lower", interpolation="nearest")
         ax2.axis("off")
-        fig.colorbar(im, ax=ax2, fraction=0.023, pad=0.045)
+        if colorbar:
+            fig.colorbar(im, ax=ax2, fraction=0.023, pad=0.045)
         ax = fig.add_subplot(111, projection='mollweide')
         ax.patch.set_alpha(0)
         yticks = np.linspace(-np.pi/2, np.pi/2, 7)[1:-1]
         xticks = np.linspace(-np.pi, np.pi, 13)[1:-1]
         ax.set_yticks(yticks, labels=[f'{deg:.0f}˚' for deg in yticks*180/np.pi], fontsize=7, alpha=0.5)
         ax.set_xticks(xticks, labels=[f'{deg:.0f}˚' for deg in xticks*180/np.pi], fontsize=7, alpha=0.5)
-        fig.colorbar(im, ax=ax, fraction=0.023, pad=0.04, alpha=0)
+        if colorbar:
+            fig.colorbar(im, ax=ax, fraction=0.023, pad=0.04, alpha=0)
         ax.grid('major', color='k', linewidth=0.25, alpha=0.7)
         for item in ax.spines.values():
             item.set_linewidth(1.2)
@@ -257,7 +257,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
 
     observed = np.transpose(allchips_flux, axes=(1,0,2))
 
-    return observed, image
+    return observed, fakemap
 
 def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30, plotspec=False):
     global wav_angs, err_LSD_profiles, dbeta
@@ -364,6 +364,7 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
+        pass
         plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2., colorbar=colorbar) # smoothed contour lines
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
@@ -1600,12 +1601,14 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.title(f"{meanby} deviation")
     plt.tight_layout()
     plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=100, transparent=True)
+
     # plot only the mean map
     plt.figure(figsize=(5,3))
     plt.imshow(mean_dev, 
         extent=(dv.max(), dv.min(), timestamps[-1], 0),
         aspect=int(0.7* 29e3/1e3),
-        cmap='YlOrBr') # positive diff means dark spot
+        cmap='YlOrBr',
+        vmin=-0.004, vmax=0.004) # positive diff means dark spot
     plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
     plt.xticks([-50, -25, 0, 25, 50])
@@ -1620,7 +1623,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
 
 def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None, cmap=plt.cm.plasma):
     '''Plot doppler map from an array.'''
-    cmap = plt.cm.gist_heat
+    cmap = plt.cm.gist_heat.copy()
     cmap.set_bad('gray', 1)
     fig = plt.figure(figsize=(5,3))
     ax = fig.add_subplot(111, projection='mollweide')
