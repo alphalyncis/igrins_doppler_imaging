@@ -108,13 +108,16 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
         if use_toy_spec:
             toy_spec = (
                 1.0
-                - 0.50 * np.exp(-0.5 * (wav0_nm[i] - 2338) ** 2 / 0.03 ** 2)
-                - 0.60 * np.exp(-0.5 * (wav0_nm[i] - 2345) ** 2 / 0.03 ** 2)
-                - 0.20 * np.exp(-0.5 * (wav0_nm[i] - 2347) ** 2 / 0.03 ** 2)
+                - 0.99 * np.exp(-0.5 * (wav0_nm[i] - 2330) ** 2 / 0.03 ** 2)
+                - 0.99 * np.exp(-0.5 * (wav0_nm[i] - 2335) ** 2 / 0.03 ** 2)
+                - 0.99 * np.exp(-0.5 * (wav0_nm[i] - 2338) ** 2 / 0.03 ** 2)
+                - 0.99 * np.exp(-0.5 * (wav0_nm[i] - 2345) ** 2 / 0.03 ** 2)
+                - 0.99 * np.exp(-0.5 * (wav0_nm[i] - 2347) ** 2 / 0.03 ** 2)
             )
             for k in range(nobs):
                 template[k, i] = toy_spec
             mean_spectrum[i] = toy_spec
+            flux_err = 0.002
         mean_spectrum[i] = np.mean(template[:, i], axis=0)
 
     print("mean_spectrum:", mean_spectrum.shape)
@@ -129,7 +132,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
                      r_deg=33, lat_deg=30, lon_deg=0, r2=20, lat2_deg=45, lon2_deg=0,
                      plot_ts=False, plot_IC14=True, colorbar=True):
     nobs = error.shape[0]
-    cmap = "gist_heat"
+    cmap = "plasma"
     # create fakemap
     if modelmap == "1spot":
         spot_brightness = contrast
@@ -194,8 +197,13 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         diffnew = diff * amp / ampold
         fakemap = 1 - diffnew
         n_lat, n_lon = fakemap.shape
+        fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
 
-    fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
+    elif modelmap == "SPOT":
+        fakemap = str(paths.data / 'modelmaps/SPOT.png')
+
+
+    #fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
 
     # Compute simulated flux
     allchips_flux = []
@@ -205,6 +213,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         sim_map[1] = kwargs_sim["u1"]
 
         flux_err_add = 0.02
+        print("flux_err:", flux_err)
         noise = {
             "none": np.zeros((nobs, npix)),
             "random": np.random.normal(np.zeros((nobs, npix)), flux_err),
@@ -230,7 +239,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         fig = plt.figure(figsize=(5,3))
         ax2 = fig.add_subplot(111)
         image = plot_map.render(projection="moll")
-        im = ax2.imshow(image, cmap=cmap, norm=Normalize(vmax=1+dif, vmin=1-dif), aspect=0.5, origin="lower", interpolation="nearest")
+        im = ax2.imshow(image, cmap=cmap, aspect=0.5, origin="lower", interpolation="nearest")
         ax2.axis("off")
         if colorbar:
             fig.colorbar(im, ax=ax2, fraction=0.023, pad=0.045)
@@ -343,7 +352,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
 
 def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=7,
                   ret_both=True, annotate=False, colorbar=False, plot_cells=False, plot_starry=False, 
-                  spotfit=False, create_obs_from_diff=True):
+                  spotfit=False, create_obs_from_diff=True, vmin=85, vmax=110):
     print("*** Using solver IC14new ***")
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
 
@@ -364,8 +373,9 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
         showmap.show(ax=ax, projection="moll", colorbar=colorbar)
     
     else:
-        pass
-        plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2., colorbar=colorbar) # smoothed contour lines
+        #pass
+        #plot_IC14_map(bestparamgrid_r, clevel=clevel, sigma=2., colorbar=colorbar) # smoothed contour lines
+        plot_IC14_map(bestparamgrid_r, colorbar=colorbar, vmin=vmin, vmax=vmax)
 
     map_type = "eqarea" if kwargs_IC14['eqarea'] else "latlon"
     if annotate:

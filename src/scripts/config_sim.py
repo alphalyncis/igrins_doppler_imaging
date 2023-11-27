@@ -83,7 +83,6 @@ smoothing = 0.1
 
 #################### Run settings ####################################
 
-flux_err = 0.01 if use_toy_spec else 0.025
 instru = "IGRINS"
 target = "W1049B"
 band = "K"
@@ -94,10 +93,10 @@ modelspec = "t1500g1000f8"
 LSD = "new"
 
 ########## IC14 parameters ##########
-nk = 155 if instru != "CRIRES" else 203
+nk = 125 if instru != "CRIRES" else 203
 cut = nk - 70
-LLD = 0.7
-alpha = 5000
+LLD = 0.4
+alpha = 2000
 ftol = 0.01 # tolerance for convergence of maximum-entropy
 nstep = 2000
 nlat, nlon = 10, 20
@@ -120,6 +119,8 @@ niter = 5000
 
 if True:
     # Auto consistent options
+    flux_err = 0.01 if use_toy_spec else 0.025
+
     if map_type == "eqarea":
         use_eqarea = True
 
