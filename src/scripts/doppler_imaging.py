@@ -131,7 +131,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
                      error, residual, noisetype, kwargs_sim, savedir, pad=100, n_lat=181, n_lon=361, 
                      r_deg=33, lat_deg=30, lon_deg=0, r2=20, lat2_deg=45, lon2_deg=0,
                      plot_ts=False, plot_IC14=True, colorbar=True):
-    nobs = error.shape[0]
+    nobs = kwargs_sim['nt']
     cmap = "plasma"
     # create fakemap
     if modelmap == "1spot":
@@ -202,6 +202,18 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
     elif modelmap == "SPOT":
         fakemap = str(paths.data / 'modelmaps/SPOT.png')
 
+    elif modelmap == "testspots":
+        spot_brightness = contrast
+        lat_1, lon_1 = 60, -90
+        lat_2, lon_2 = 30, 0
+        lat_3, lon_3 = 0, 90
+        r_deg = 20
+        print(f"Running spot brightness {spot_brightness*100}% of surrounding")
+        fakemap = np.ones((n_lat, n_lon))
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat))
+        fakemap[np.sqrt((y-lat_1)**2 + (x-lon_1)**2) <= r_deg] = spot_brightness # default spot at lon=0
+        fakemap[np.sqrt((y-lat_2)**2 + (x-lon_2)**2) <= r_deg] = spot_brightness
+        fakemap[np.sqrt((y-lat_3)**2 + (x-lon_3)**2) <= r_deg] = spot_brightness
 
     #fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
 
@@ -217,9 +229,9 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         noise = {
             "none": np.zeros((nobs, npix)),
             "random": np.random.normal(np.zeros((nobs, npix)), flux_err),
-            "obserr": error[:, i, pad:-pad],
-            "residual": residual[:, i, pad:-pad],
-            "res+random": residual[:, i, pad:-pad] + np.random.normal(np.zeros((nobs, npix)), flux_err_add)
+            #"obserr": error[:, i, pad:-pad],
+            #"residual": residual[:, i, pad:-pad],
+            #"res+random": residual[:, i, pad:-pad] + np.random.normal(np.zeros((nobs, npix)), flux_err_add)
         }
 
         sim_map.spectrum = mean_spectrum[i]

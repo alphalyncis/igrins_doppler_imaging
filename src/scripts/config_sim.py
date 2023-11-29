@@ -166,7 +166,7 @@ if True:
 
     # set time and period parameters
     #timestamp = np.linspace(0, period, nobs)  # simulate equal time interval obs
-    tobs = 5.1
+    tobs = 5
     timestamp = np.linspace(0, tobs, nobs)
     phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad; IC14
     theta = 360.0 * timestamp / period      # 0 ~ 360 in degree; starry sim & run

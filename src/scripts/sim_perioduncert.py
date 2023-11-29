@@ -16,21 +16,20 @@ noisetype = "random"
 #goodchips_sim[instru][band] = [2, 3, 4]
 
 modelmap = "testspots"
-tobs = 5
+
+period_true = 5
 
 maps = []
-for period_true in [3, 5, 10, 12]:
-    period = period_true
-    savedir = f"sim_period/{period_true}"
+for period in [3, 7]:
+    tobs = period
+    savedir = f"sim_perioduncert/{period}"
+    if not os.path.exists(paths.figures / savedir):
+        os.makedirs(paths.figures / savedir)
 
     #################### Automatic ####################################
 
     if True:
         cut = nk - 70
-
-        if not os.path.exists(paths.figures / savedir):
-            os.makedirs(paths.figures / savedir)
-
         # Auto consistent options
         if map_type == "eqarea":
             use_eqarea = True
@@ -75,18 +74,10 @@ for period_true in [3, 5, 10, 12]:
         veq = vsini / np.sin(inc * np.pi / 180)
 
         # set time and period parameters
-        nobs_sim = int(nobs * period / tobs + 0.5) # number of observed time points in simulation
-        timestamp_sim = np.linspace(0, period, nobs_sim)  # simulated obs time points in hours
-        if period < tobs:
-            nobs_extra = nobs - len(timestamp_sim) + 1
-            extra_times = timestamp_sim[1:nobs_extra] + period
-            timestamp_sim = np.concatenate((timestamp_sim, extra_times))
-            nobs_sim = len(timestamp_sim)
-        theta_sim = 360.0 * timestamp_sim / period_true
-
-        timestamp = timestamp_sim[:nobs] # observed time points in hours
-        theta = theta_sim[:nobs]        # observed time points in degree (0 ~ 360)
-        phases = theta * np.pi / 180.0  # observed time points in rad (0 ~ 2*pi)
+        timestamp = np.linspace(0, tobs, nobs)  # observed time points in hours
+        phases = timestamp * 2 * np.pi / period # 0 ~ 2*pi in rad     # guessed
+        theta = 360.0 * timestamp / period      # 0 ~ 360 in degree   # guessed 
+        theta_true = 360.0 * timestamp / period_true # sim using true period, retrieve using guessed period
 
         assert nobs == len(theta)
 
@@ -96,10 +87,10 @@ for period_true in [3, 5, 10, 12]:
             nc=nc,
             veq=veq,
             inc=inc,
-            nt=nobs_sim,
+            nt=nobs,
             vsini_max=vsini_max,
             u1=u1,
-            theta=theta_sim)
+            theta=theta_true)
 
         kwargs_run = kwargs_sim.copy()
         kwargs_run['ydeg'] = ydeg
@@ -138,7 +129,7 @@ for period_true in [3, 5, 10, 12]:
     observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm, error, residual, 
                             noisetype, kwargs_sim, savedir, r_deg=20, lat_deg=60, lon_deg=30, plot_ts=False, colorbar=False)
     # Compute LSD mean profile
-    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed[:nobs], wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
+    intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
                                                          period, timestamp, savedir, cut=cut)
 
     bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False)

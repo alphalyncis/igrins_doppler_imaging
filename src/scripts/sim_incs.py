@@ -11,18 +11,21 @@ from config_sim import *
 
 target = "W1049A"
 contrast = 0.7
-alpha = 100
-nlat, non = 20, 40
 roll = 0
 noisetype = "random"
-modelmap = "SPOT"
 use_toy_spec = False
 #goodchips_sim[instru][target][band] = [2, 3, 4]
+
+#alpha = 100
+#nlat, non = 20, 40
+#modelmap = "SPOT"
+modelmap = "testspots"
+
 
 tobs = 7
 
 maps = []
-for inc in [70]:
+for inc in [50, 60, 70, 80, 90]:
     savedir = f"sim_inc/{inc}"
     if not os.path.exists(paths.figures / savedir):
         os.makedirs(paths.figures / savedir)
@@ -30,7 +33,7 @@ for inc in [70]:
     #################### Automatic ####################################
 
     if True:
-        flux_err = 0.0 if use_toy_spec else 0.025
+
         cut = nk - 70
         # Auto consistent options
         if map_type == "eqarea":
@@ -134,7 +137,7 @@ for inc in [70]:
                                                          period, timestamp, savedir, cut=cut)
 
     bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, create_obs_from_diff=True,
-                                         annotate=False, colorbar=False, vmin=40, vmax=160)
+                                         annotate=False, colorbar=False) #, vmin=40, vmax=160)
     maps.append(bestparamgrid_r)
 
     #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)

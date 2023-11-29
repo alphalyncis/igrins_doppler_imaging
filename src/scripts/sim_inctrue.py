@@ -15,9 +15,11 @@ roll = 0
 noisetype = "random"
 #goodchips_sim[instru][band] = [2, 3, 4]
 
-alpha = 100
-nlat, nlon = 20, 40
-modelmap = "SPOT"
+#alpha = 100
+#nlat, nlon = 20, 40
+#modelmap = "SPOT"
+
+modelmap = "testspots"
 
 tobs = 7
 inc_true = 70
@@ -133,7 +135,7 @@ for inc in [50, 60, 70, 80, 90]:
     intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
                                                          period, timestamp, savedir, cut=cut)
 
-    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, vmin=40, vmax=160)
+    bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False) #, vmin=40, vmax=160)
     maps.append(bestparamgrid_r)
 
     #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
