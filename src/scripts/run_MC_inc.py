@@ -2,21 +2,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 ### Measurements
-vsini =     {"W1049B": {"K": 27.3, "H": 31.9, "avg": 28.6},
-		     "W1049A": {"K": 19.4, "H": 19.2, "avg": 19.4}}
-vsini_err = {"W1049B": {"K": 4.5, "H": 10.9, "avg": 7.0},
-		 	 "W1049A": {"K": 5.2, "H": 16.2, "avg": 9.2}}
-period =    {"W1049B": 5,
-			 "W1049A": 7}
-period_err = 0.3
+vsini =     {"WISE1049B": {"K": 27.3, "H": 31.9, "avg": 28.6},
+		     "WISE1049A": {"K": 19.4, "H": 19.2, "avg": 19.4}}
+vsini_err = {"WISE1049B": {"K": 4.5, "H": 10.9, "avg": 7.0},
+		 	 "WISE1049A": {"K": 5.2, "H": 16.2, "avg": 9.2}}
+period =    {"WISE1049B": 5,
+			 "WISE1049A": 7}
+period_err = {"WISE1049B": 0.3,
+			 "WISE1049A": 1}
 radius, radius_err = 1.00, 0.1
 
 # generate Gaussian samples
-target = "W1049B"
-tag = "K"
+target = "WISE1049A"
+tag = "avg"
 vsini_arr = np.random.normal(vsini[target][tag], vsini_err[target][tag], 100000)
 radius_arr = np.random.normal(radius,radius_err, 100000)
-period_arr = np.random.normal(period[target], period_err, 100000)
+period_arr = np.random.normal(period[target], period_err[target], 100000)
 
 Rjup = 69911.   # radius of jupiter in km
 hourtosec = 3600.  # conversion from hours to seconds
@@ -40,7 +41,7 @@ def arcsin(theta_arr):
 
 hfont = {'size':'10'}
 fig = plt.figure(figsize=(10,3.5))
-fig.suptitle(f"measurement tag: {target} {tag}, period = {period[target]:.1f}±{period_err:.1f} h, radius = {radius:.1f}±{radius_err:.1f} Rjup")
+fig.suptitle(f"{target}, period = {period[target]:.1f}±{period_err[target]:.1f} h, radius = {radius:.1f}±{radius_err:.1f} R_jup")
 plt.subplot(141)
 plt.hist(vsini_arr, 30, density=True, color='green')
 plt.xlabel('v sin i (km/s)', **hfont)

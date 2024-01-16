@@ -9,8 +9,6 @@ from config_sim import *
 modelmap = "1band"
 savedir = "sim_band"
 nk = 125
-nlat, nlon = 10, 20
-alpha = 2000
 contrast = 0.8
 noisetype = "random"
 
@@ -114,8 +112,8 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 #bestparamgrid_rs = np.array([None, None, None])
 
 # Make mock observed spectra
-observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
-                    savedir, lat=0, plot_ts=True, colorbar=False)
+observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm, error, residual, noisetype, kwargs_sim, 
+                    savedir, r_deg=15, lat_deg=0, lon_deg=90, plot_ts=True, plot_IC14=False,  colorbar=False)
 
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 

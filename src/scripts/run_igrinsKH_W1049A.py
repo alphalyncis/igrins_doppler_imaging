@@ -137,8 +137,8 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False)
-plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=90, vmax=106)
+bestparamgrid_r, bestparamgrid = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
+#plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=90, vmax=106)
 mapA_HK = bestparamgrid_r.copy()
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 

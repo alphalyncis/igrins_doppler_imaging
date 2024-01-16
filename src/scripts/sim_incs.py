@@ -131,7 +131,7 @@ for inc in [50, 60, 70, 80, 90]:
 
     # Make mock observed spectra
     observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                            noisetype, kwargs_sim, savedir, r_deg=25, lat_deg=30, lon_deg=90, plot_ts=False, colorbar=False)
+                            noisetype, kwargs_sim, savedir, plot_ts=False, plot_IC14=False, colorbar=False)
     # Compute LSD mean profile
     intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
                                                          period, timestamp, savedir, cut=cut)

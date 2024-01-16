@@ -128,8 +128,8 @@ def load_data(model_datafile, instru, nobs, goodchips, use_toy_spec=False):
     return mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm
 
 def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm,
-                     error, residual, noisetype, kwargs_sim, savedir, pad=100, n_lat=181, n_lon=361, 
-                     r_deg=33, lat_deg=30, lon_deg=0, r2=20, lat2_deg=45, lon2_deg=0,
+                     error, residual, noisetype, kwargs_sim, savedir, n_lat=181, n_lon=361, 
+                     r_deg=33, lat_deg=30, lon_deg=0, r2_deg=20, lat2_deg=45, lon2_deg=0,
                      plot_ts=False, plot_IC14=True, colorbar=True):
     nobs = kwargs_sim['nt']
     cmap = "plasma"
@@ -139,26 +139,26 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat))
-        fakemap[np.sqrt((y+lat_deg)**2 + (x-lon_deg)**2) <= r_deg] = spot_brightness # default spot at lon=0
+        fakemap[np.sqrt((y-lat_deg)**2 + (x-lon_deg)**2) <= r_deg] = spot_brightness # default spot at lon=0
 
     if modelmap == "2spot":
         spot_brightness = contrast
         print(f"Running spot brightness {spot_brightness*100}% of surrounding")
         fakemap = np.ones((n_lat, n_lon))
         x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
-        fakemap[np.sqrt((y+lat_deg)**2 + (x+lon_deg)**2) <= r] = spot_brightness
-        fakemap[np.sqrt((y+lat2_deg)**2 + (x+lon2_deg)**2) <= r2] = spot_brightness
+        fakemap[np.sqrt((y-lat_deg)**2 + (x-lon_deg)**2) <= r_deg] = spot_brightness
+        fakemap[np.sqrt((y-lat2_deg)**2 + (x-lon2_deg)**2) <= r2_deg] = spot_brightness
 
     elif modelmap == "1band":
-        band_width = 15
-        band_lat = 0
+        band_width = r_deg
+        band_lat = lat_deg
         amp = 1 - contrast
         print(f"Running wave max amplitude diff {amp*100}%")
-        phase = 0.7 #0-1?
+        phase = lon_deg
         fakemap = np.ones((n_lat, n_lon))
-        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat), )
+        x, y = np.meshgrid(np.linspace(-180, 180, n_lon), np.linspace(-90, 90, n_lat))
         band_ind = np.s_[(90-band_lat)-band_width:(90-band_lat)+band_width]
-        fakemap[band_ind] += amp * np.sin((x[band_ind]/360 - phase) * 2*np.pi)
+        fakemap[band_ind] += amp * np.sin((x[band_ind]-lon_deg-90) * np.pi/180)
         #fakemap[band_ind] -= amp
 
     elif modelmap == "1uniband":
@@ -197,7 +197,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
         diffnew = diff * amp / ampold
         fakemap = 1 - diffnew
         n_lat, n_lon = fakemap.shape
-        fakemap = np.roll(fakemap[::-1, :], shift=int(roll*n_lon), axis=1)
+        fakemap = np.roll(fakemap[::-1, :], shift=int(lon_deg/360 * n_lon), axis=1)
 
     elif modelmap == "SPOT":
         fakemap = str(paths.data / 'modelmaps/SPOT.png')
@@ -269,7 +269,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
     
     else:
         fig, ax = plt.subplots()
-        plot_map.show(ax=ax, projection="moll", colorbar=colorbar, cmap=cmap, norm=Normalize(vmax=1+dif, vmin=1-dif))
+        sim_map.show(ax=ax, projection="moll", colorbar=colorbar)
 
     plt.savefig(paths.figures / f"{savedir}/fakemap.png", bbox_inches="tight", dpi=100, transparent=True)
 
@@ -280,7 +280,7 @@ def spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm,
 
     return observed, fakemap
 
-def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30, plotspec=False):
+def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, period, timestamps, savedir, pad=100, cut=30, plotspec=False, colorbar=False):
     global wav_angs, err_LSD_profiles, dbeta
     print(instru)
     nobs = observed.shape[0]
@@ -358,7 +358,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02, cut=int(cut/2+1))
 
     ### Plot deviation map for each chip and mean deviation map
-    plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=cut)
+    plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=cut, colorbar=colorbar)
 
     return intrinsic_profiles, obskerns_norm
 
@@ -1587,57 +1587,50 @@ def plot_chipav_kern_timeseries(obskerns_norm, dv, timestamps, savedir, gap=0.02
     #plt.legend(loc=4, bbox_to_anchor=(1,1))
     plt.savefig(paths.figures / f"{savedir}/tsplot.png", bbox_inches="tight", dpi=300, transparent=True)
 
-def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median", cut=30):
+def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir, meanby="median",colorbar=False, cut=30, lim=0.003):
     '''Plot deviation map for each chip and mean deviation map'''
     nobs, nchip, nk = obskerns_norm.shape
     uniform_profiles = np.zeros((nchip, nk))
+    ratio = 0.7 #if nchip != 4 else 0.5
 
-    plt.figure(figsize=(nchip*4,2.5))
+    # plot deviation map for each chip
+    plt.figure(figsize=(nchip*4,3))
     for i, jj in enumerate(goodchips):
         uniform_profiles[i] = obskerns_norm[:,i].mean(axis=0) # is each chip's mean kern over epoches
-        plt.subplot(1,nchip+1,i+1)
+        plt.subplot(1,nchip,i+1)
         plt.imshow(obskerns_norm[:,i]-uniform_profiles[i], 
             extent=(dv.max(), dv.min(), timestamps[-1], 0),
-            aspect=int(0.7*vsini/1e3),
+            aspect=int(ratio*29),
             cmap='YlOrBr') # positive diff means dark spot
         plt.xlim(dv.min()+cut, dv.max()-cut),
         plt.xlabel("velocity (km/s)")
         plt.ylabel("Elapsed time (h)")
-        plt.colorbar(fraction=0.035)
         plt.title(f"chip={jj}")
+    plt.tight_layout()
+    plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=100, transparent=True)
+
+    # plot only the chip-mean map
     if meanby == "median":
         mean_dev = np.median(np.array([obskerns_norm[:,i]-uniform_profiles[i] for i in range(nchip)]), axis=0) # mean over chips
     elif meanby == "median_each":
         mean_dev = np.median(obskerns_norm, axis=1) - np.median(uniform_profiles,axis=0)
     elif meanby == "mean":
         mean_dev = np.mean(np.array([obskerns_norm[:,i]-uniform_profiles[i] for i in range(nchip)]), axis=0) # mean over chips
-    plt.subplot(1, nchip+1,i+2)
-    plt.imshow(mean_dev, 
-        extent=(dv.max(), dv.min(), timestamps[-1], 0),
-        aspect=int(0.7* vsini/1e3),
-        cmap='YlOrBr') # positive diff means dark spot
-    plt.xlim(dv.min()+cut, dv.max()-cut),
-    plt.xlabel("velocity (km/s)")
-    plt.ylabel("Elapsed time (h)")
-    plt.colorbar(fraction=0.035)
-    plt.title(f"{meanby} deviation")
-    plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot_full.png", bbox_inches="tight", dpi=100, transparent=True)
-
-    # plot only the mean map
     plt.figure(figsize=(5,3))
     plt.imshow(mean_dev, 
         extent=(dv.max(), dv.min(), timestamps[-1], 0),
-        aspect=int(0.7* 29e3/1e3),
+        aspect=int(ratio* 29),
         cmap='YlOrBr',
-        vmin=-0.004, vmax=0.004) # positive diff means dark spot
+        vmin=-lim, vmax=lim) # positive diff means dark spot
     plt.xlim(dv.min()+cut, dv.max()-cut),
     plt.xlabel("velocity (km/s)")
     plt.xticks([-50, -25, 0, 25, 50])
     plt.ylabel("Elapsed time (h)")
     plt.vlines(x=vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)
     plt.vlines(x=-vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)
-    plt.colorbar(fraction=0.036)
+    if colorbar:
+        cb = plt.colorbar(fraction=0.055, pad=0.25, aspect=18, orientation="horizontal")
+        cb.ax.tick_params(labelsize=8)
     #plt.title(f"{meanby} deviation")
     #plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
@@ -1645,7 +1638,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
 
 def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None, cmap=plt.cm.plasma):
     '''Plot doppler map from an array.'''
-    cmap = plt.cm.gist_heat.copy()
+    cmap = plt.cm.plasma.copy()
     cmap.set_bad('gray', 1)
     fig = plt.figure(figsize=(5,3))
     ax = fig.add_subplot(111, projection='mollweide')
@@ -1658,7 +1651,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, v
         im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=cmap, shading='gouraud', vmin=vmin, vmax=vmax)
     #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
-        fig.colorbar(im, fraction=0.023, pad=0.04)
+        fig.colorbar(im, fraction=0.08, pad=0.1, orientation="horizontal")
     yticks = np.linspace(-np.pi/2, np.pi/2, 7)[1:-1]
     xticks = np.linspace(-np.pi, np.pi, 13)[1:-1]
     ax.set_yticks(yticks, labels=[f'{deg:.0f}˚' for deg in yticks*180/np.pi], fontsize=7, alpha=0.5)

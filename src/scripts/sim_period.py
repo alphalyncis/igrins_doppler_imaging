@@ -19,7 +19,7 @@ modelmap = "testspots"
 tobs = 5
 
 maps = []
-for period_true in [3, 5, 10, 12]:
+for period_true in [3, 5, 7, 10, 12]:
     period = period_true
     savedir = f"sim_period/{period_true}"
 
@@ -136,7 +136,7 @@ for period_true in [3, 5, 10, 12]:
 
     # Make mock observed spectra
     observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                            noisetype, kwargs_sim, savedir, r_deg=20, lat_deg=60, lon_deg=30, plot_ts=False, colorbar=False)
+                            noisetype, kwargs_sim, savedir, plot_ts=False, plot_IC14=False, colorbar=False)
     # Compute LSD mean profile
     intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed[:nobs], wav_nm, goodchips, pmod, line_file, cont_file, nk, vsini, rv, 
                                                          period, timestamp, savedir, cut=cut)

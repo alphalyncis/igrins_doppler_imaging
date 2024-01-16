@@ -101,10 +101,10 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
                                                      period, timestamps[target], savedir, cut=cut)
 
 # Solve by 5 solvers
-bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True, spotfit=False)
-plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False, vmin=85, vmax=110)
+#plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
 mapB_K = bestparamgrid_r.copy()
-make_gif_map(mapB_K, inc, period, kwargs_fig['savedir'])
+#make_gif_map(mapB_K, inc, period, kwargs_fig['savedir'])
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
 
 #LSDopt_map = solve_LSD_starry_opt(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, lr=lr_LSD, niter=5000, annotate=False, colorbar=False)

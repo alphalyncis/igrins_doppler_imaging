@@ -13,13 +13,9 @@ if not os.path.exists(paths.figures / savedir):
     os.makedirs(paths.figures / savedir)
 
 target = "W1049A"
-nk = 125
-LLD = 0.4
-alpha = 2000
-contrast = 0.6
-roll = 0.8
+contrast = 0.8
+roll = 0
 noisetype = "random"
-tobs = 5.07
 #goodchips_sim[instru][band] = [2, 3, 4, 5, 7, 12, 13, 15, 16, 18]
 #[3, 4, 5, 16, 18]
 
@@ -125,8 +121,9 @@ print("theta", theta)
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
 # Make mock observed spectra
-observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, fakemap_nlat, fakemap_nlon, mean_spectrum, wav_nm, wav0_nm, error, residual, 
-                            noisetype, kwargs_sim, savedir, r_deg=30, lat_deg=60, lon_deg=-75, plot_ts=False, colorbar=False)
+observed, fakemap = spectra_from_sim(modelmap, contrast, roll, smoothing, mean_spectrum, wav_nm, wav0_nm, error, residual, 
+                            noisetype, kwargs_sim, savedir, r_deg=30, lat_deg=60, lon_deg=-75, 
+                            plot_ts=False, plot_IC14=False, colorbar=False)
 
 
 # Compute LSD mean profile

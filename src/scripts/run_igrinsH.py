@@ -96,7 +96,6 @@ if True:
 assert simulation_on == False
 assert savedir == "igrinsH"
 print(f"Using real observation {model_datafile}")
-rv = 7.05e-5
 # Load data from pickle fit
 mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(model_datafile, instru, nobs, goodchips)
 
@@ -104,8 +103,8 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, nk, 
                                                      vsini, rv, period, timestamps[target], savedir, cut=cut)
 
-bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=True)
-plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
+bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, vmin=85, vmax=110)
+#plot_IC14_map(bestparamgrid_r, colorbar=False, vmin=85, vmax=110)
 mapB_H = bestparamgrid_r.copy()
 
 #LSDlin_map = solve_LSD_starry_lin(intrinsic_profiles, obskerns_norm, kwargs_run, kwargs_fig, annotate=False, colorbar=False)
