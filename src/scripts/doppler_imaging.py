@@ -1591,7 +1591,7 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     '''Plot deviation map for each chip and mean deviation map'''
     nobs, nchip, nk = obskerns_norm.shape
     uniform_profiles = np.zeros((nchip, nk))
-    ratio = 0.7 #if nchip != 4 else 0.5
+    ratio = 1.3 if nobs < 10 else 0.7 #if nchip != 4 else 0.5
 
     # plot deviation map for each chip
     plt.figure(figsize=(nchip*4,3))

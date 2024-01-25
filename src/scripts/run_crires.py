@@ -103,12 +103,12 @@ mean_spectrum, template, observed, residual, error, wav_nm, wav0_nm = load_data(
 
 # Compute LSD mean profile
 intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_file, cont_file, 
-                                                     nk, vsini, rv, period, timestamps[target], savedir, cut=cut, colorbar=True)
+                                                     nk, vsini, rv, period, timestamps[target], savedir, cut=cut, colorbar=False)
 
 
 # Solve by 5 solvers
 bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False, create_obs_from_diff=True)
-plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.75), axis=1), colorbar=True, vmin=85, vmax=110)
+plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.75), axis=1), colorbar=False, vmin=85, vmax=110)
 plt.savefig(paths.figures / f"{savedir}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 #make_gif_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)), inc, period, kwargs_fig['savedir'])
 

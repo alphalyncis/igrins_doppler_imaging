@@ -110,7 +110,7 @@ intrinsic_profiles, obskerns_norm = make_LSD_profile(instru, template, observed,
 
 # Solve by 5 solvers
 bestparamgrid_r, res = solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, annotate=False, colorbar=False, spotfit=False)
-plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.75), axis=1), colorbar=True, vmin=85, vmax=110)
+plot_IC14_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.75), axis=1), colorbar=False, vmin=85, vmax=110)
 mapA_crires = bestparamgrid_r.copy()
 #make_gif_map(np.roll(bestparamgrid_r, shift=int(bestparamgrid_r.shape[1]*0.5)), inc, period, kwargs_fig['savedir'])
 
