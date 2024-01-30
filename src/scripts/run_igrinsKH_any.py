@@ -8,10 +8,13 @@ import paths
 
 from config_run import *
 
-target = "2M0036_1105"
+target = "W1049B_0209"
 savedir = f"igrinsHK_{target}"
 band = "both"
-modelspec = "t1500g1000f8"
+modelspecK = "t1500g1000f8"
+modelspecH = "t1500g1000f8"
+if "W1049B" in target:
+    modelspecH = "t1400g1000f8"
 
 #################### Automatic ####################################
 if True:
@@ -33,10 +36,10 @@ if True:
     goodchipsH = goodchips_run[instru][target]["H"]
 
     # set model files to use
-    if "t1" in modelspec:
-        model_datafileK = paths.data / f'{instru}_{target}_K_{modelspec}.pickle'
-        model_datafileH = paths.data / f'{instru}_{target}_H_{modelspec}.pickle'
-        pmod = f'linbroad_{modelspec}'
+    if "t1" in modelspecK:
+        model_datafileK = paths.data / f'{instru}_{target}_K_{modelspecK}.pickle'
+        model_datafileH = paths.data / f'{instru}_{target}_H_{modelspecH}.pickle'
+        pmod = f'linbroad_{modelspecK}'
         rv = rvs[target]
 
     line_file = paths.data / f'linelists/{pmod}_edited.clineslsd'

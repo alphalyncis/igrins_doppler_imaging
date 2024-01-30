@@ -8,11 +8,14 @@ import paths
 
 from config_run import *
 
-target = "W1049A_0209" # 2M0036_1105
+target = "W1049B_0209" # 2M0036_1105
 band = "H"
-#goodchips_run[instru][target][band] = [2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17, 18, 19]
 savedir = f"igrins{band}_{target}"
-#modelspec = "t1400g1000f8"
+if "W1049B" in target and band == "H":
+    modelspec = "t1400g1000f8"
+#nlat, nlon = 12, 24
+#goodchips_run[instru][target][band] = []
+alpha = 5000
 
 #################### Automatic ####################################
 

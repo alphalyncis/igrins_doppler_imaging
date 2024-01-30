@@ -11,10 +11,10 @@ from config_run import *
 
 target = "W1049A_0209"
 instru = "IGRINS"
-band = "H"
+band = "K"
 savedir = f"nktest_{target}_{band}"
 goodchips_run[instru][target][band] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
-if target == "W1049B" and band == "H":
+if "W1049B" in target and band == "H":
     modelspec = "t1400g1000f8"
 
 #################### Automatic ####################################

@@ -363,7 +363,7 @@ def make_LSD_profile(instru, template, observed, wav_nm, goodchips, pmod, line_f
     return intrinsic_profiles, obskerns_norm
 
 def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, clevel=7,
-                  ret_both=True, annotate=False, colorbar=False, plot_cells=False, plot_starry=False, 
+                  ret_both=True, annotate=False, colorbar=False, plot_cells=False, plot_starry=False, plot_fit=False,
                   spotfit=False, create_obs_from_diff=True, vmin=85, vmax=110):
     print("*** Using solver IC14new ***")
     nobs, nk = obskerns_norm.shape[0], obskerns_norm.shape[2]
@@ -402,19 +402,20 @@ def solve_IC14new(intrinsic_profiles, obskerns_norm, kwargs_IC14, kwargs_fig, cl
     plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1.png", bbox_inches="tight", dpi=100, transparent=True)
 
     # Plot fit result
-    obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
-    bestmodel_2d = np.reshape(res['model_observation'], (nobs, nk))
-    flatmodel_2d = np.reshape(res['flatmodel'], (nobs, nk))
+    if plot_fit:
+        obs_2d = np.reshape(res['sc_observation_1d'], (nobs, nk))
+        bestmodel_2d = np.reshape(res['model_observation'], (nobs, nk))
+        flatmodel_2d = np.reshape(res['flatmodel'], (nobs, nk))
 
-    plt.figure(figsize=(5, 7))
-    for i in range(nobs):
-        plt.plot(res['dv'], obs_2d[i] - 0.02*i, color='k', linewidth=1)
-        #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
-        plt.plot(res['dv'], bestmodel_2d[i] - 0.02*i, color='r', linewidth=1)
-        plt.plot(res['dv'], flatmodel_2d[i] - 0.02*i, '--', color='gray', linewidth=1)
-    plt.legend(labels=['obs', 'best-fit map', 'flat map'])
+        plt.figure(figsize=(5, 7))
+        for i in range(nobs):
+            plt.plot(res['dv'], obs_2d[i] - 0.02*i, color='k', linewidth=1)
+            #plt.plot(obs[i] - 0.02*i, '.', color='k', markersize=2)
+            plt.plot(res['dv'], bestmodel_2d[i] - 0.02*i, color='r', linewidth=1)
+            plt.plot(res['dv'], flatmodel_2d[i] - 0.02*i, '--', color='gray', linewidth=1)
+        plt.legend(labels=['obs', 'best-fit map', 'flat map'])
     try:
-        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1_ts.png", bbox_inches="tight", dpi=100, transparent=True)
+        plt.savefig(paths.figures / f"{kwargs_fig['savedir']}/solver1_ts.png", bbox_inches="tight", dpi=150, transparent=True)
     except:
         pass
 
@@ -1629,12 +1630,12 @@ def plot_deviation_map(obskerns_norm, goodchips, dv, vsini, timestamps, savedir,
     plt.vlines(x=vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)
     plt.vlines(x=-vsini/1e3, ymin=0, ymax=timestamps[-1], colors="k", linestyles="dashed", linewidth=1)
     if colorbar:
-        cb = plt.colorbar(fraction=0.055, pad=0.25, aspect=18, orientation="horizontal")
+        cb = plt.colorbar(fraction=0.06, pad=0.26, aspect=15, orientation="horizontal")
         cb.ax.tick_params(labelsize=8)
     #plt.title(f"{meanby} deviation")
     #plt.text(dv.min()+5, 0.5, f"chips={goodchips}", fontsize=8)
     plt.tight_layout()
-    plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=100, transparent=True)
+    plt.savefig(paths.figures / f"{savedir}/tvplot.png", bbox_inches="tight", dpi=150, transparent=True)
 
 def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, vmin=None, cmap=plt.cm.plasma):
     '''Plot doppler map from an array.'''
@@ -1651,7 +1652,7 @@ def plot_IC14_map(bestparamgrid, colorbar=False, clevel=5, sigma=1, vmax=None, v
         im = ax.pcolormesh(Lon, Lat, bestparamgrid, cmap=cmap, shading='gouraud', vmin=vmin, vmax=vmax)
     #contour = ax.contour(Lon, Lat, gaussian_filter(bestparamgrid, sigma), clevel, colors='white', linewidths=0.5)
     if colorbar:
-        fig.colorbar(im, fraction=0.08, pad=0.1, orientation="horizontal")
+        fig.colorbar(im, fraction=0.065, pad=0.2, orientation="horizontal", label="%")
     yticks = np.linspace(-np.pi/2, np.pi/2, 7)[1:-1]
     xticks = np.linspace(-np.pi, np.pi, 13)[1:-1]
     ax.set_yticks(yticks, labels=[f'{deg:.0f}˚' for deg in yticks*180/np.pi], fontsize=7, alpha=0.5)
